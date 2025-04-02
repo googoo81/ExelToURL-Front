@@ -19,6 +19,7 @@ interface ExtractedRow {
   isValid?: boolean;
   status?: number;
   isXml?: boolean;
+  typeValue?: string;
 }
 
 interface JobStatus {
@@ -29,14 +30,17 @@ interface JobStatus {
     isValid: boolean;
     statusCode: number;
     isXml?: boolean;
+    type_value?: string;
     error?: string;
   }>;
+  type_counts?: Record<string, number>;
 }
 
 export default function Home() {
   const [fileData, setFileData] = useState<ExtractedRow[] | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [validOnly, setValidOnly] = useState<boolean>(false);
   const [showValidOnly, setShowValidOnly] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
@@ -45,6 +49,10 @@ export default function Home() {
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
+  const [typeAnalysisResult, setTypeAnalysisResult] = useState<Record<
+    string,
+    number
+  > | null>(null);
 
   useEffect(() => {
     return () => {
@@ -197,6 +205,7 @@ export default function Home() {
                 matchingRow.isValid = result.isValid;
                 matchingRow.status = result.statusCode;
                 matchingRow.isXml = result.isXml;
+                matchingRow.typeValue = result.type_value;
               }
             });
 
@@ -208,6 +217,55 @@ export default function Home() {
         clearInterval(interval);
         setPollingInterval(null);
         setIsValidating(false);
+      }
+    }, 1000);
+
+    setPollingInterval(interval);
+  };
+
+  const pollTypeAnalysisStatus = (jobId: string) => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get<JobStatus>(
+          `${serverUrl}/job-status/${jobId}`
+        );
+        const jobStatus = response.data;
+
+        setValidationProgress(jobStatus.progress);
+
+        if (jobStatus.status === "completed") {
+          clearInterval(interval);
+          setPollingInterval(null);
+          setIsAnalyzing(false);
+
+          if (jobStatus.type_counts) {
+            setTypeAnalysisResult(jobStatus.type_counts);
+          }
+
+          if (jobStatus.results && fileData) {
+            const updatedData = [...fileData];
+
+            jobStatus.results.forEach((result) => {
+              const matchingRow = updatedData.find(
+                (row) => row.url === result.url
+              );
+              if (matchingRow && result.type_value) {
+                matchingRow.typeValue = result.type_value;
+              }
+            });
+
+            setFileData(updatedData);
+          }
+        }
+      } catch (error) {
+        console.error("Error polling analysis status:", error);
+        clearInterval(interval);
+        setPollingInterval(null);
+        setIsAnalyzing(false);
       }
     }, 1000);
 
@@ -252,6 +310,38 @@ export default function Home() {
     }
   };
 
+  const startTypeAnalysis = async () => {
+    if (!fileData) return;
+
+    setIsAnalyzing(true);
+    setValidationProgress(0);
+
+    try {
+      const validUrls = fileData
+        .filter((row) => row.isValid === true)
+        .map((row) => row.url)
+        .filter(Boolean) as string[];
+
+      if (validUrls.length === 0) {
+        alert(
+          "분석할 유효한 URL이 없습니다. 먼저 URL 유효성 검사를 실행해주세요."
+        );
+        setIsAnalyzing(false);
+        return;
+      }
+
+      const response = await axios.post(`${serverUrl}/analyze-xml-types`, {
+        urls: validUrls,
+      });
+
+      const jobId = response.data.job_id;
+      pollTypeAnalysisStatus(jobId);
+    } catch (error) {
+      console.error("Error starting XML type analysis:", error);
+      setIsAnalyzing(false);
+    }
+  };
+
   const assumeAllValid = () => {
     if (!fileData) return;
     setIsValidating(true);
@@ -275,6 +365,7 @@ export default function Home() {
     }
 
     setIsValidating(false);
+    setIsAnalyzing(false);
   };
 
   const displayData = fileData
@@ -289,6 +380,57 @@ export default function Home() {
     fileData?.filter((row) => row.isValid === false).length || 0;
   const uncheckedCount =
     fileData?.filter((row) => row.isValid === undefined).length || 0;
+
+  const TypeAnalysisResults = ({
+    typeAnalysisResult,
+  }: {
+    typeAnalysisResult: Record<string, number> | null;
+  }) => {
+    if (!typeAnalysisResult) return null;
+
+    const entries = Object.entries(typeAnalysisResult);
+    if (entries.length === 0) return <p>분석 결과가 없습니다.</p>;
+
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+
+    return (
+      <div className="mt-6 p-4 border rounded bg-gray-50">
+        <h3 className="text-lg font-bold mb-3">
+          XML &lt;TYPE&gt; 태그 분석 결과
+        </h3>
+        <p className="mb-2">총 분석된 XML 파일: {total}개</p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border p-2 text-left">TYPE 값</th>
+                <th className="border p-2 text-center">갯수</th>
+                <th className="border p-2 text-center">비율</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries
+                .sort((a, b) => b[1] - a[1])
+                .map(([typeValue, count]) => (
+                  <tr key={typeValue || "없음"} className="hover:bg-gray-100">
+                    <td className="border p-2 font-medium">
+                      {typeValue || (
+                        <span className="text-gray-500 italic">없음</span>
+                      )}
+                    </td>
+                    <td className="border p-2 text-center">{count}</td>
+                    <td className="border p-2 text-center">
+                      {((count / total) * 100).toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-4">
@@ -330,36 +472,44 @@ export default function Home() {
           <div className="flex flex-wrap gap-2 justify-between items-center mb-4">
             <h2 className="text-xl font-bold">추출된 URL 목록</h2>
             <div className="flex gap-2 flex-wrap">
-              {isValidating ? (
+              {isValidating || isAnalyzing ? (
                 <button
                   onClick={cancelValidation}
                   className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
                 >
-                  검사 취소
+                  {isValidating ? "검사 취소" : "분석 취소"}
                 </button>
               ) : (
                 <>
                   <button
                     onClick={startUrlValidation}
-                    disabled={isValidating}
+                    disabled={isValidating || isAnalyzing}
                     className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
-                    URL 유효성 검사 (폴링)
+                    URL 유효성 검사
                   </button>
 
                   <button
                     onClick={startXmlValidation}
-                    disabled={isValidating}
+                    disabled={isValidating || isAnalyzing}
                     className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
-                    XML 특수 검사 (폴링)
+                    XML 특수 검사
+                  </button>
+
+                  <button
+                    onClick={startTypeAnalysis}
+                    disabled={isValidating || isAnalyzing}
+                    className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
+                  >
+                    &lt;TYPE&gt; 태그 분석
                   </button>
                 </>
               )}
 
               <button
                 onClick={assumeAllValid}
-                disabled={isValidating}
+                disabled={isValidating || isAnalyzing}
                 className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
               >
                 모든 URL 유효하게 처리
@@ -401,14 +551,15 @@ export default function Home() {
             </div>
           </div>
 
-          {isValidating && (
+          {(isValidating || isAnalyzing) && (
             <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
               <div
                 className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                 style={{ width: `${validationProgress}%` }}
               ></div>
               <p className="text-center text-sm mt-1">
-                진행률: {validationProgress}%
+                진행률: {validationProgress}%{" "}
+                {isAnalyzing && "(TYPE 태그 분석 중...)"}
               </p>
             </div>
           )}
@@ -425,9 +576,13 @@ export default function Home() {
             </p>
           </div>
 
+          {typeAnalysisResult && (
+            <TypeAnalysisResults typeAnalysisResult={typeAnalysisResult} />
+          )}
+
           <ul className="list-disc pl-5 space-y-2">
             <li className="border-b pb-2">
-              https://cache.wjthinkbig.com/BLLCONTENTS/ACT/과목코드/학년/학기/단원순서/학년_학기_1_목차일련번호_1.XML{" "}
+              https://cache.wjthinkbig.com/BLLCONTENTS/ACT/과목코드/학년/학기/단원순서/학년_학기_1_목차일련번호_1.XML
               <br />
               https://cache.wjthinkbig.com/BLLCONTENTS/ACT/SCNE/GR14/4/1/GR14_4_1_129787_1.XML
             </li>
@@ -464,6 +619,11 @@ export default function Home() {
                         {row.isValid ? "유효함" : "접근 불가"}
                         {row.status && `(${row.status})`}
                         {row.isXml && " XML확인"}
+                      </span>
+                    )}
+                    {row.typeValue && (
+                      <span className="ml-2 px-2 py-1 text-xs rounded bg-blue-500 text-white">
+                        TYPE: {row.typeValue}
                       </span>
                     )}
                   </div>
