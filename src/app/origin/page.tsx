@@ -2,10 +2,7 @@
 
 import { useState, ChangeEvent } from "react";
 import * as XLSX from "xlsx";
-
-interface ExcelRow {
-  [key: string]: string | number;
-}
+import { ExcelRow } from "@/types";
 
 export default function Origin() {
   const [fileData, setFileData] = useState<ExcelRow[] | null>(null);

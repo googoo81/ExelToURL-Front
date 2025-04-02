@@ -3,38 +3,7 @@
 import { useState, ChangeEvent, useEffect } from "react";
 import * as XLSX from "xlsx";
 import axios from "axios";
-
-interface ExcelRow {
-  [key: string]: string | number;
-}
-
-interface ExtractedRow {
-  과목코드: string | number;
-  학년: string | number;
-  학기: string | number;
-  단원순서: string | number;
-  목차일련번호: string | number;
-  학년E: string | number;
-  url: string | null;
-  isValid?: boolean;
-  status?: number;
-  isXml?: boolean;
-  typeValue?: string;
-}
-
-interface JobStatus {
-  status: "in_progress" | "completed";
-  progress: number;
-  results?: Array<{
-    url: string;
-    isValid: boolean;
-    statusCode: number;
-    isXml?: boolean;
-    type_value?: string;
-    error?: string;
-  }>;
-  type_counts?: Record<string, number>;
-}
+import { ExcelRow, ExtractedRow, JobStatus } from "@/types";
 
 export default function Home() {
   const [fileData, setFileData] = useState<ExtractedRow[] | null>(null);
@@ -166,12 +135,10 @@ export default function Home() {
 
     let dataToUse = fileData;
 
-    // 유효한 URL만 필터링
     if (validOnly) {
       dataToUse = dataToUse.filter((row) => row.isValid);
     }
 
-    // TYPE 필터 적용
     if (selectedTypeFilter) {
       dataToUse = dataToUse.filter(
         (row) => row.typeValue === selectedTypeFilter
@@ -387,7 +354,6 @@ export default function Home() {
   };
 
   const handleTypeClick = (typeValue: string) => {
-    // 현재 선택된 타입과 같은 타입을 클릭하면 필터 해제
     if (selectedTypeFilter === typeValue) {
       setSelectedTypeFilter(null);
     } else {
@@ -395,16 +361,13 @@ export default function Home() {
     }
   };
 
-  // 표시할 데이터 필터링
   let displayData = fileData;
 
   if (displayData) {
-    // 유효한 URL만 표시 옵션
     if (showValidOnly) {
       displayData = displayData.filter((row) => row.isValid === true);
     }
 
-    // TYPE 필터 적용
     if (selectedTypeFilter) {
       displayData = displayData.filter(
         (row) => row.typeValue === selectedTypeFilter
@@ -419,7 +382,6 @@ export default function Home() {
   const uncheckedCount =
     fileData?.filter((row) => row.isValid === undefined).length || 0;
 
-  // 현재 선택된 TYPE에 해당하는 URL 수
   const selectedTypeCount = selectedTypeFilter
     ? fileData?.filter((row) => row.typeValue === selectedTypeFilter).length ||
       0
