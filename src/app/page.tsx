@@ -53,6 +53,9 @@ export default function Home() {
     string,
     number
   > | null>(null);
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     return () => {
@@ -153,6 +156,7 @@ export default function Home() {
 
       console.log(extractedData);
       setFileData(extractedData);
+      setSelectedTypeFilter(null);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -160,9 +164,19 @@ export default function Home() {
   const copyAllUrls = () => {
     if (!fileData) return;
 
-    const dataToUse = validOnly
-      ? fileData.filter((row) => row.isValid)
-      : fileData;
+    let dataToUse = fileData;
+
+    // 유효한 URL만 필터링
+    if (validOnly) {
+      dataToUse = dataToUse.filter((row) => row.isValid);
+    }
+
+    // TYPE 필터 적용
+    if (selectedTypeFilter) {
+      dataToUse = dataToUse.filter(
+        (row) => row.typeValue === selectedTypeFilter
+      );
+    }
 
     const allUrls = dataToUse.map((row) => row.url).join("\n");
     navigator.clipboard
@@ -277,6 +291,7 @@ export default function Home() {
 
     setIsValidating(true);
     setValidationProgress(0);
+    setSelectedTypeFilter(null);
 
     try {
       const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
@@ -296,6 +311,7 @@ export default function Home() {
 
     setIsValidating(true);
     setValidationProgress(0);
+    setSelectedTypeFilter(null);
 
     try {
       const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
@@ -315,6 +331,7 @@ export default function Home() {
 
     setIsAnalyzing(true);
     setValidationProgress(0);
+    setSelectedTypeFilter(null);
 
     try {
       const validUrls = fileData
@@ -345,6 +362,7 @@ export default function Home() {
   const assumeAllValid = () => {
     if (!fileData) return;
     setIsValidating(true);
+    setSelectedTypeFilter(null);
     try {
       const updatedData = fileData.map((row) => ({
         ...row,
@@ -368,11 +386,31 @@ export default function Home() {
     setIsAnalyzing(false);
   };
 
-  const displayData = fileData
-    ? showValidOnly
-      ? fileData.filter((row) => row.isValid === true)
-      : fileData
-    : null;
+  const handleTypeClick = (typeValue: string) => {
+    // 현재 선택된 타입과 같은 타입을 클릭하면 필터 해제
+    if (selectedTypeFilter === typeValue) {
+      setSelectedTypeFilter(null);
+    } else {
+      setSelectedTypeFilter(typeValue);
+    }
+  };
+
+  // 표시할 데이터 필터링
+  let displayData = fileData;
+
+  if (displayData) {
+    // 유효한 URL만 표시 옵션
+    if (showValidOnly) {
+      displayData = displayData.filter((row) => row.isValid === true);
+    }
+
+    // TYPE 필터 적용
+    if (selectedTypeFilter) {
+      displayData = displayData.filter(
+        (row) => row.typeValue === selectedTypeFilter
+      );
+    }
+  }
 
   const validCount =
     fileData?.filter((row) => row.isValid === true).length || 0;
@@ -380,6 +418,12 @@ export default function Home() {
     fileData?.filter((row) => row.isValid === false).length || 0;
   const uncheckedCount =
     fileData?.filter((row) => row.isValid === undefined).length || 0;
+
+  // 현재 선택된 TYPE에 해당하는 URL 수
+  const selectedTypeCount = selectedTypeFilter
+    ? fileData?.filter((row) => row.typeValue === selectedTypeFilter).length ||
+      0
+    : 0;
 
   const TypeAnalysisResults = ({
     typeAnalysisResult,
@@ -400,6 +444,23 @@ export default function Home() {
         </h3>
         <p className="mb-2">총 분석된 XML 파일: {total}개</p>
 
+        {selectedTypeFilter && (
+          <div className="mb-4 p-2 bg-blue-100 rounded flex items-center justify-between">
+            <p>
+              <span className="font-bold">
+                &quot;{selectedTypeFilter}&quot;
+              </span>{" "}
+              TYPE 필터 적용 중 ({selectedTypeCount}개 URL)
+            </p>
+            <button
+              onClick={() => setSelectedTypeFilter(null)}
+              className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-3 rounded text-sm"
+            >
+              필터 해제
+            </button>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -407,13 +468,19 @@ export default function Home() {
                 <th className="border p-2 text-left">TYPE 값</th>
                 <th className="border p-2 text-center">갯수</th>
                 <th className="border p-2 text-center">비율</th>
+                <th className="border p-2 text-center">액션</th>
               </tr>
             </thead>
             <tbody>
               {entries
                 .sort((a, b) => b[1] - a[1])
                 .map(([typeValue, count]) => (
-                  <tr key={typeValue || "없음"} className="hover:bg-gray-100">
+                  <tr
+                    key={typeValue || "없음"}
+                    className={`hover:bg-gray-100 ${
+                      selectedTypeFilter === typeValue ? "bg-blue-50" : ""
+                    }`}
+                  >
                     <td className="border p-2 font-medium">
                       {typeValue || (
                         <span className="text-gray-500 italic">없음</span>
@@ -422,6 +489,20 @@ export default function Home() {
                     <td className="border p-2 text-center">{count}</td>
                     <td className="border p-2 text-center">
                       {((count / total) * 100).toFixed(1)}%
+                    </td>
+                    <td className="border p-2 text-center">
+                      <button
+                        onClick={() => handleTypeClick(typeValue)}
+                        className={`py-1 px-3 rounded text-sm ${
+                          selectedTypeFilter === typeValue
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-200 hover:bg-gray-300"
+                        }`}
+                      >
+                        {selectedTypeFilter === typeValue
+                          ? "필터 해제"
+                          : "URL 보기"}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -573,6 +654,12 @@ export default function Home() {
                   (현재 유효한 URL {validCount}개만 표시 중)
                 </span>
               )}
+              {selectedTypeFilter && (
+                <span className="ml-2 font-medium text-blue-600">
+                  | TYPE: &quot;{selectedTypeFilter}&quot; 필터 적용 중 (
+                  {selectedTypeCount}개)
+                </span>
+              )}
             </p>
           </div>
 
@@ -587,7 +674,7 @@ export default function Home() {
               https://cache.wjthinkbig.com/BLLCONTENTS/ACT/SCNE/GR14/4/1/GR14_4_1_129787_1.XML
             </li>
 
-            {displayData &&
+            {displayData && displayData.length > 0 ? (
               displayData.map((row, index) => (
                 <li
                   key={index}
@@ -596,6 +683,10 @@ export default function Home() {
                       ? "bg-red-100"
                       : row.isValid === true
                       ? "bg-green-100"
+                      : ""
+                  } ${
+                    row.typeValue === selectedTypeFilter
+                      ? "ring-2 ring-blue-400"
                       : ""
                   }`}
                 >
@@ -622,7 +713,16 @@ export default function Home() {
                       </span>
                     )}
                     {row.typeValue && (
-                      <span className="ml-2 px-2 py-1 text-xs rounded bg-blue-500 text-white">
+                      <span
+                        className={`ml-2 px-2 py-1 text-xs rounded ${
+                          row.typeValue === selectedTypeFilter
+                            ? "bg-blue-600 text-white font-bold"
+                            : "bg-blue-500 text-white"
+                        }`}
+                        onClick={() => handleTypeClick(row.typeValue as string)}
+                        style={{ cursor: "pointer" }}
+                        title="클릭하여 이 TYPE으로 필터링"
+                      >
                         TYPE: {row.typeValue}
                       </span>
                     )}
@@ -640,7 +740,14 @@ export default function Home() {
                     {row.url}
                   </a>
                 </li>
-              ))}
+              ))
+            ) : (
+              <li className="py-4 text-center text-gray-500">
+                {selectedTypeFilter
+                  ? `선택한 TYPE "${selectedTypeFilter}"에 해당하는 URL이 없습니다.`
+                  : "표시할 URL이 없습니다."}
+              </li>
+            )}
           </ul>
         </div>
       )}
