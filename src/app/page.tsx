@@ -4,6 +4,7 @@ import { useState, ChangeEvent, useEffect } from "react";
 import * as XLSX from "xlsx";
 import axios from "axios";
 import { ExcelRow, ExtractedRow, JobStatus } from "@/types";
+import React from "react";
 
 export default function Home() {
   const [fileData, setFileData] = useState<ExtractedRow[] | null>(null);
@@ -130,20 +131,28 @@ export default function Home() {
     reader.readAsArrayBuffer(file);
   };
 
-  const copyAllUrls = () => {
-    if (!fileData) return;
+  const getFilteredData = () => {
+    if (!fileData) return [];
 
-    let dataToUse = fileData;
+    let filteredData = [...fileData];
 
     if (validOnly) {
-      dataToUse = dataToUse.filter((row) => row.isValid);
+      filteredData = filteredData.filter((row) => row.isValid);
     }
 
     if (selectedTypeFilter) {
-      dataToUse = dataToUse.filter(
+      filteredData = filteredData.filter(
         (row) => row.typeValue === selectedTypeFilter
       );
     }
+
+    return filteredData;
+  };
+
+  const copyAllUrls = () => {
+    if (!fileData) return;
+
+    const dataToUse = getFilteredData();
 
     const allUrls = dataToUse.map((row) => row.url).join("\n");
     navigator.clipboard
@@ -361,19 +370,21 @@ export default function Home() {
     }
   };
 
-  let displayData = fileData;
+  const displayData = React.useMemo(() => {
+    if (!fileData) return null;
 
-  if (displayData) {
+    let filtered = [...fileData];
+
     if (showValidOnly) {
-      displayData = displayData.filter((row) => row.isValid === true);
+      filtered = filtered.filter((row) => row.isValid === true);
     }
 
     if (selectedTypeFilter) {
-      displayData = displayData.filter(
-        (row) => row.typeValue === selectedTypeFilter
-      );
+      filtered = filtered.filter((row) => row.typeValue === selectedTypeFilter);
     }
-  }
+
+    return filtered;
+  }, [fileData, showValidOnly, selectedTypeFilter]);
 
   const validCount =
     fileData?.filter((row) => row.isValid === true).length || 0;
@@ -386,6 +397,8 @@ export default function Home() {
     ? fileData?.filter((row) => row.typeValue === selectedTypeFilter).length ||
       0
     : 0;
+
+  const filteredCount = getFilteredData().length;
 
   const TypeAnalysisResults = ({
     typeAnalysisResult,
@@ -587,9 +600,19 @@ export default function Home() {
 
               <button
                 onClick={copyAllUrls}
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer flex items-center"
               >
-                {copySuccess ? "복사 완료!" : "모든 URL 복사"}
+                {copySuccess ? (
+                  "복사 완료!"
+                ) : (
+                  <>
+                    <span>
+                      {validOnly || selectedTypeFilter
+                        ? `필터링된 URL 복사 (${filteredCount}개)`
+                        : `모든 URL 복사 (${fileData.length}개)`}
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>
