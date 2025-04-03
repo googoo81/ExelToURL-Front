@@ -23,7 +23,14 @@ export default function Home() {
     string,
     number
   > | null>(null);
+  const [styleAnalysisResult, setStyleAnalysisResult] = useState<Record<
+    string,
+    number
+  > | null>(null);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string | null>(
+    null
+  );
+  const [selectedStyleFilter, setSelectedStyleFilter] = useState<string | null>(
     null
   );
 
@@ -127,6 +134,7 @@ export default function Home() {
       console.log(extractedData);
       setFileData(extractedData);
       setSelectedTypeFilter(null);
+      setSelectedStyleFilter(null);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -143,6 +151,12 @@ export default function Home() {
     if (selectedTypeFilter) {
       filteredData = filteredData.filter(
         (row) => row.typeValue === selectedTypeFilter
+      );
+    }
+
+    if (selectedStyleFilter) {
+      filteredData = filteredData.filter(
+        (row) => row.styleContent === selectedStyleFilter
       );
     }
 
@@ -196,6 +210,7 @@ export default function Home() {
                 matchingRow.status = result.statusCode;
                 matchingRow.isXml = result.isXml;
                 matchingRow.typeValue = result.type_value;
+                matchingRow.styleContent = result.style_content;
               }
             });
 
@@ -236,6 +251,10 @@ export default function Home() {
             setTypeAnalysisResult(jobStatus.type_counts);
           }
 
+          if (jobStatus.style_counts) {
+            setStyleAnalysisResult(jobStatus.style_counts);
+          }
+
           if (jobStatus.results && fileData) {
             const updatedData = [...fileData];
 
@@ -243,8 +262,13 @@ export default function Home() {
               const matchingRow = updatedData.find(
                 (row) => row.url === result.url
               );
-              if (matchingRow && result.type_value) {
-                matchingRow.typeValue = result.type_value;
+              if (matchingRow) {
+                if (result.type_value) {
+                  matchingRow.typeValue = result.type_value;
+                }
+                if (result.style_content) {
+                  matchingRow.styleContent = result.style_content;
+                }
               }
             });
 
@@ -268,6 +292,7 @@ export default function Home() {
     setIsValidating(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
+    setSelectedStyleFilter(null);
 
     try {
       const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
@@ -288,6 +313,7 @@ export default function Home() {
     setIsValidating(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
+    setSelectedStyleFilter(null);
 
     try {
       const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
@@ -308,6 +334,7 @@ export default function Home() {
     setIsAnalyzing(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
+    setSelectedStyleFilter(null);
 
     try {
       const validUrls = fileData
@@ -339,6 +366,7 @@ export default function Home() {
     if (!fileData) return;
     setIsValidating(true);
     setSelectedTypeFilter(null);
+    setSelectedStyleFilter(null);
     try {
       const updatedData = fileData.map((row) => ({
         ...row,
@@ -367,6 +395,18 @@ export default function Home() {
       setSelectedTypeFilter(null);
     } else {
       setSelectedTypeFilter(typeValue);
+      // Clear style filter when type filter is applied
+      setSelectedStyleFilter(null);
+    }
+  };
+
+  const handleStyleClick = (styleValue: string) => {
+    if (selectedStyleFilter === styleValue) {
+      setSelectedStyleFilter(null);
+    } else {
+      setSelectedStyleFilter(styleValue);
+      // Clear type filter when style filter is applied
+      setSelectedTypeFilter(null);
     }
   };
 
@@ -383,8 +423,14 @@ export default function Home() {
       filtered = filtered.filter((row) => row.typeValue === selectedTypeFilter);
     }
 
+    if (selectedStyleFilter) {
+      filtered = filtered.filter(
+        (row) => row.styleContent === selectedStyleFilter
+      );
+    }
+
     return filtered;
-  }, [fileData, showValidOnly, selectedTypeFilter]);
+  }, [fileData, showValidOnly, selectedTypeFilter, selectedStyleFilter]);
 
   const validCount =
     fileData?.filter((row) => row.isValid === true).length || 0;
@@ -396,6 +442,11 @@ export default function Home() {
   const selectedTypeCount = selectedTypeFilter
     ? fileData?.filter((row) => row.typeValue === selectedTypeFilter).length ||
       0
+    : 0;
+
+  const selectedStyleCount = selectedStyleFilter
+    ? fileData?.filter((row) => row.styleContent === selectedStyleFilter)
+        .length || 0
     : 0;
 
   const filteredCount = getFilteredData().length;
@@ -488,6 +539,94 @@ export default function Home() {
     );
   };
 
+  const StyleAnalysisResults = ({
+    styleAnalysisResult,
+  }: {
+    styleAnalysisResult: Record<string, number> | null;
+  }) => {
+    if (!styleAnalysisResult) return null;
+
+    const entries = Object.entries(styleAnalysisResult);
+    if (entries.length === 0) return <p>STYLE 분석 결과가 없습니다.</p>;
+
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+
+    return (
+      <div className="mt-6 p-4 border rounded bg-gray-50">
+        <h3 className="text-lg font-bold mb-3">
+          XML &lt;STYLE&gt; 태그 분석 결과
+        </h3>
+        <p className="mb-2">총 분석된 XML 파일: {total}개</p>
+
+        {selectedStyleFilter && (
+          <div className="mb-4 p-2 bg-purple-100 rounded flex items-center justify-between">
+            <p>
+              <span className="font-bold">
+                &quot;{selectedStyleFilter}&quot;
+              </span>{" "}
+              STYLE 필터 적용 중 ({selectedStyleCount}개 URL)
+            </p>
+            <button
+              onClick={() => setSelectedStyleFilter(null)}
+              className="bg-purple-500 hover:bg-purple-700 text-white py-1 px-3 rounded text-sm"
+            >
+              필터 해제
+            </button>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-200">
+                <th className="border p-2 text-left">STYLE 값</th>
+                <th className="border p-2 text-center">갯수</th>
+                <th className="border p-2 text-center">비율</th>
+                <th className="border p-2 text-center">액션</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries
+                .sort((a, b) => b[1] - a[1])
+                .map(([styleValue, count]) => (
+                  <tr
+                    key={styleValue || "없음"}
+                    className={`hover:bg-gray-100 ${
+                      selectedStyleFilter === styleValue ? "bg-purple-50" : ""
+                    }`}
+                  >
+                    <td className="border p-2 font-medium">
+                      {styleValue || (
+                        <span className="text-gray-500 italic">없음</span>
+                      )}
+                    </td>
+                    <td className="border p-2 text-center">{count}</td>
+                    <td className="border p-2 text-center">
+                      {((count / total) * 100).toFixed(1)}%
+                    </td>
+                    <td className="border p-2 text-center">
+                      <button
+                        onClick={() => handleStyleClick(styleValue)}
+                        className={`py-1 px-3 rounded text-sm ${
+                          selectedStyleFilter === styleValue
+                            ? "bg-purple-600 text-white"
+                            : "bg-gray-200 hover:bg-gray-300"
+                        }`}
+                      >
+                        {selectedStyleFilter === styleValue
+                          ? "필터 해제"
+                          : "URL 보기"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">URL 추출 및 유효성 검사</h1>
@@ -558,7 +697,7 @@ export default function Home() {
                     disabled={isValidating || isAnalyzing}
                     className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
-                    &lt;TYPE&gt; 태그 분석
+                    &lt;TYPE&gt; 및 &lt;STYLE&gt; 태그 분석
                   </button>
                 </>
               )}
@@ -607,7 +746,7 @@ export default function Home() {
                 ) : (
                   <>
                     <span>
-                      {validOnly || selectedTypeFilter
+                      {validOnly || selectedTypeFilter || selectedStyleFilter
                         ? `필터링된 URL 복사 (${filteredCount}개)`
                         : `모든 URL 복사 (${fileData.length}개)`}
                     </span>
@@ -625,7 +764,7 @@ export default function Home() {
               ></div>
               <p className="text-center text-sm mt-1">
                 진행률: {validationProgress}%{" "}
-                {isAnalyzing && "(TYPE 태그 분석 중...)"}
+                {isAnalyzing && "(태그 분석 중...)"}
               </p>
             </div>
           )}
@@ -645,11 +784,21 @@ export default function Home() {
                   {selectedTypeCount}개)
                 </span>
               )}
+              {selectedStyleFilter && (
+                <span className="ml-2 font-medium text-purple-600">
+                  | STYLE: &quot;{selectedStyleFilter}&quot; 필터 적용 중 (
+                  {selectedStyleCount}개)
+                </span>
+              )}
             </p>
           </div>
 
           {typeAnalysisResult && (
             <TypeAnalysisResults typeAnalysisResult={typeAnalysisResult} />
+          )}
+
+          {styleAnalysisResult && (
+            <StyleAnalysisResults styleAnalysisResult={styleAnalysisResult} />
           )}
 
           <ul className="list-disc pl-5 space-y-2">
@@ -672,6 +821,10 @@ export default function Home() {
                   } ${
                     row.typeValue === selectedTypeFilter
                       ? "ring-2 ring-blue-400"
+                      : ""
+                  } ${
+                    row.styleContent === selectedStyleFilter
+                      ? "ring-2 ring-purple-400"
                       : ""
                   }`}
                 >
@@ -709,6 +862,19 @@ export default function Home() {
                         title="클릭하여 이 TYPE으로 필터링"
                       >
                         TYPE: {row.typeValue}
+                      </span>
+                    )}
+                    {row.styleContent && (
+                      <span
+                        className={`ml-2 px-2 py-1 text-xs rounded ${
+                          row.styleContent === selectedTypeFilter
+                            ? "bg-purple-600 text-white font-bold"
+                            : "bg-purple-500 text-white"
+                        }`}
+                        style={{ cursor: "pointer" }}
+                        title="클릭하여 이 STYLE으로 필터링"
+                      >
+                        STYLE: {row.styleContent}
                       </span>
                     )}
                   </div>
