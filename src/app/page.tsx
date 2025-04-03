@@ -16,6 +16,7 @@ export default function Home() {
   const [validationProgress, setValidationProgress] = useState<number>(0);
   const [serverUrl, setServerUrl] = useState<string>("http://127.0.0.1:5000/");
   const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
@@ -395,7 +396,6 @@ export default function Home() {
       setSelectedTypeFilter(null);
     } else {
       setSelectedTypeFilter(typeValue);
-      // Clear style filter when type filter is applied
       setSelectedStyleFilter(null);
     }
   };
@@ -405,7 +405,6 @@ export default function Home() {
       setSelectedStyleFilter(null);
     } else {
       setSelectedStyleFilter(styleValue);
-      // Clear type filter when style filter is applied
       setSelectedTypeFilter(null);
     }
   };
@@ -627,6 +626,104 @@ export default function Home() {
     );
   };
 
+  const downloadXML = async (url: string, filename: string) => {
+    try {
+      const response = await axios.get(`${serverUrl}/download-xml`, {
+        params: { url },
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], { type: "application/xml" });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.setAttribute("download", filename || "download.xml");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      return true;
+    } catch (error) {
+      console.error("Error downloading XML:", error);
+      alert("XML 다운로드 중 오류가 발생했습니다.");
+      return false;
+    }
+  };
+
+  const downloadSelectedXMLs = async (useZip = true) => {
+    const dataToDownload = getFilteredData();
+    if (!dataToDownload.length) {
+      alert("다운로드할 XML 파일이 없습니다.");
+      return;
+    }
+
+    const validFiles = dataToDownload.filter(
+      (row) => row.url && row.isValid !== false
+    );
+    if (validFiles.length === 0) {
+      alert("다운로드할 유효한 XML 파일이 없습니다.");
+      return;
+    }
+
+    setIsDownloading(true);
+
+    if (useZip) {
+      try {
+        const urls = validFiles.map((row) => row.url as string);
+        const response = await axios.post(
+          `${serverUrl}/create-zip`,
+          { urls },
+          { responseType: "blob" }
+        );
+
+        const blob = new Blob([response.data], { type: "application/zip" });
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.setAttribute("download", "xml_files.zip");
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+
+        alert(`${urls.length}개의 XML 파일이 ZIP으로 다운로드되었습니다.`);
+      } catch (error) {
+        console.error("Error downloading ZIP:", error);
+        alert("ZIP 다운로드 중 오류가 발생했습니다.");
+      }
+    } else {
+      const maxDownloads = 10;
+      if (validFiles.length > maxDownloads) {
+        if (
+          !confirm(
+            `선택된 ${validFiles.length}개 중 처음 ${maxDownloads}개만 다운로드합니다. 계속하시겠습니까?`
+          )
+        ) {
+          setIsDownloading(false);
+          return;
+        }
+      }
+
+      let successCount = 0;
+      for (let i = 0; i < Math.min(validFiles.length, maxDownloads); i++) {
+        const row = validFiles[i];
+        if (!row.url) continue;
+
+        const filename = row.url.split("/").pop() || `file_${i}.xml`;
+
+        const success = await downloadXML(row.url, filename);
+        if (success) successCount++;
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      alert(`${successCount}개의 XML 파일 다운로드를 완료했습니다.`);
+    }
+
+    setIsDownloading(false);
+  };
+
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">URL 추출 및 유효성 검사</h1>
@@ -753,6 +850,15 @@ export default function Home() {
                   </>
                 )}
               </button>
+              <button
+                onClick={() => downloadSelectedXMLs(true)}
+                disabled={isDownloading || isValidating || isAnalyzing}
+                className="bg-teal-500 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400 flex items-center"
+              >
+                {isDownloading
+                  ? "ZIP 다운로드 중..."
+                  : `ZIP으로 다운로드 (${filteredCount}개)`}
+              </button>
             </div>
           </div>
 
@@ -877,6 +983,22 @@ export default function Home() {
                         STYLE: {row.styleContent}
                       </span>
                     )}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (row.url) {
+                          const filename =
+                            row.url.split("/").pop() || "file.xml";
+                          downloadXML(row.url, filename);
+                        }
+                      }}
+                      disabled={
+                        !row.url || row.isValid === false || isDownloading
+                      }
+                      className="ml-2 px-2 py-1 text-xs rounded bg-teal-500 hover:bg-teal-700 text-white disabled:bg-gray-400"
+                    >
+                      다운로드
+                    </button>
                   </div>
                   <a
                     href={row.url || "#"}
