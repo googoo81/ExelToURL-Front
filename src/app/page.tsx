@@ -2,26 +2,11 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { JobStatus } from "@/types";
+import { JobStatus, FileRow } from "@/types";
 import React from "react";
 import { useHandleFileUpload, useHandleTypeClick } from "@/hooks";
 import { useStyleStore } from "@/states";
-import { StyleAnalysisResults, TypeAnalysisResults } from "@/components";
-
-interface FileRow {
-  url?: string;
-  isValid?: boolean;
-  status?: number;
-  isXml?: boolean;
-  typeValue?: string;
-  styleContent?: string;
-  과목코드?: string;
-  학년?: string | number;
-  학기?: string | number;
-  단원순서?: string | number;
-  학년E?: string | number;
-  목차일련번호?: string | number;
-}
+import { AnalysisResults } from "@/components";
 
 export default function Home() {
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
@@ -36,10 +21,6 @@ export default function Home() {
     null
   );
   const [typeAnalysisResult, setTypeAnalysisResult] = useState<Record<
-    string,
-    number
-  > | null>(null);
-  const [styleAnalysisResult, setStyleAnalysisResult] = useState<Record<
     string,
     number
   > | null>(null);
@@ -76,7 +57,7 @@ export default function Home() {
       });
   };
 
-  const pollJobStatus = (jobId: string) => {
+  const pollJobStatus = (jobId: string, jobType = "validation") => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
     }
@@ -92,63 +73,11 @@ export default function Home() {
         if (jobStatus.status === "completed") {
           clearInterval(interval);
           setPollingInterval(null);
-          setIsValidating(false);
 
-          if (jobStatus.results && fileData) {
-            const updatedData = [...fileData];
-
-            jobStatus.results.forEach((result) => {
-              const matchingRow = updatedData.find(
-                (row) => row.url === result.url
-              );
-              if (matchingRow) {
-                matchingRow.isValid = result.isValid;
-                matchingRow.status = result.statusCode;
-                matchingRow.isXml = result.isXml;
-                matchingRow.typeValue = result.type_value;
-                matchingRow.styleContent = result.style_content;
-              }
-            });
-
-            setFileData(updatedData);
-          }
-        }
-      } catch (error) {
-        console.error("Error polling job status:", error);
-        clearInterval(interval);
-        setPollingInterval(null);
-        setIsValidating(false);
-      }
-    }, 1000);
-
-    setPollingInterval(interval);
-  };
-
-  const pollTypeAnalysisStatus = (jobId: string) => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<JobStatus>(
-          `${serverUrl}/job-status/${jobId}`
-        );
-        const jobStatus = response.data;
-
-        setValidationProgress(jobStatus.progress);
-
-        if (jobStatus.status === "completed") {
-          clearInterval(interval);
-          setPollingInterval(null);
-          setIsAnalyzing(false);
-
-          if (jobStatus.type_counts) {
-            setTypeAnalysisResult(jobStatus.type_counts);
-          }
-
-          if (jobStatus.style_counts) {
-            setStyleAnalysisResult(jobStatus.style_counts);
+          if (jobType === "validation" || jobType === "xml_validation") {
+            setIsValidating(false);
+          } else if (jobType === "analysis") {
+            setIsAnalyzing(false);
           }
 
           if (jobStatus.results && fileData) {
@@ -159,10 +88,20 @@ export default function Home() {
                 (row) => row.url === result.url
               );
               if (matchingRow) {
-                if (result.type_value) {
+                if (result.isValid !== undefined) {
+                  matchingRow.isValid = result.isValid;
+                }
+                if (result.statusCode !== undefined) {
+                  matchingRow.status = result.statusCode;
+                }
+                if (result.isXml !== undefined) {
+                  matchingRow.isXml = result.isXml;
+                }
+
+                if (result.type_value !== undefined) {
                   matchingRow.typeValue = result.type_value;
                 }
-                if (result.style_content) {
+                if (result.style_content !== undefined) {
                   matchingRow.styleContent = result.style_content;
                 }
               }
@@ -170,12 +109,23 @@ export default function Home() {
 
             setFileData(updatedData);
           }
+
+          if (jobType === "analysis") {
+            if (jobStatus.type_counts) {
+              setTypeAnalysisResult(jobStatus.type_counts);
+            }
+          }
         }
       } catch (error) {
-        console.error("Error polling analysis status:", error);
+        console.error(`Error polling ${jobType} status:`, error);
         clearInterval(interval);
         setPollingInterval(null);
-        setIsAnalyzing(false);
+
+        if (jobType === "validation" || jobType === "xml_validation") {
+          setIsValidating(false);
+        } else if (jobType === "analysis") {
+          setIsAnalyzing(false);
+        }
       }
     }, 1000);
 
@@ -196,7 +146,7 @@ export default function Home() {
         urls,
       });
       const jobId = response.data.job_id;
-      pollJobStatus(jobId);
+      pollJobStatus(jobId, "validation");
     } catch (error) {
       console.error("Error starting validation:", error);
       setIsValidating(false);
@@ -217,7 +167,7 @@ export default function Home() {
         urls,
       });
       const jobId = response.data.job_id;
-      pollJobStatus(jobId);
+      pollJobStatus(jobId, "xml_validation");
     } catch (error) {
       console.error("Error starting XML validation:", error);
       setIsValidating(false);
@@ -251,9 +201,9 @@ export default function Home() {
       });
 
       const jobId = response.data.job_id;
-      pollTypeAnalysisStatus(jobId);
+      pollJobStatus(jobId, "analysis");
     } catch (error) {
-      console.error("Error starting XML type analysis:", error);
+      console.error("Error starting XML analysis:", error);
       setIsAnalyzing(false);
     }
   };
@@ -516,7 +466,7 @@ export default function Home() {
                     disabled={isValidating || isAnalyzing}
                     className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
-                    &lt;TYPE&gt; 및 &lt;STYLE&gt; 태그 분석
+                    XML 태그 전체 분석
                   </button>
                 </>
               )}
@@ -555,7 +505,7 @@ export default function Home() {
                   <>
                     <span>
                       {validOnly || selectedTypeFilter || selectedStyleFilter
-                        ? `필터링된 URL 복사 (${validCount}개)`
+                        ? `필터링된 URL 복사 (${displayData?.length || 0}개)`
                         : `모든 URL 복사 (${fileData.length}개)`}
                     </span>
                   </>
@@ -568,7 +518,10 @@ export default function Home() {
               >
                 {isDownloading
                   ? "ZIP 다운로드 중..."
-                  : `ZIP으로 다운로드 (${validCount}개)`}
+                  : `ZIP으로 다운로드 (${
+                      displayData?.filter((row) => row.isValid !== false)
+                        .length || 0
+                    }개)`}
               </button>
             </div>
           </div>
@@ -610,16 +563,7 @@ export default function Home() {
             </p>
           </div>
 
-          {typeAnalysisResult && (
-            <TypeAnalysisResults typeAnalysisResult={typeAnalysisResult} />
-          )}
-
-          {styleAnalysisResult && (
-            <StyleAnalysisResults
-              styleAnalysisResult={styleAnalysisResult}
-              selectedStyleCount={selectedStyleCount}
-            />
-          )}
+          {typeAnalysisResult && <AnalysisResults />}
 
           <ul className="list-disc pl-5 space-y-2">
             <li className="border-b pb-2">

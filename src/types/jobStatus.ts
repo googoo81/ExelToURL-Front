@@ -12,4 +12,5 @@ export interface JobStatus {
   }>;
   type_counts?: Record<string, number>;
   style_counts?: Record<string, number>;
+  tag_counts?: Record<string, Record<string, number>> | null;
 }
