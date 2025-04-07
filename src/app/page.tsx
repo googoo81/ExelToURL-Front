@@ -1,18 +1,33 @@
 "use client";
 
-import { useState, ChangeEvent, useEffect } from "react";
-import * as XLSX from "xlsx";
+import { useState, useEffect } from "react";
 import axios from "axios";
-import { ExcelRow, ExtractedRow, JobStatus } from "@/types";
+import { JobStatus } from "@/types";
 import React from "react";
+import { useHandleFileUpload, useHandleTypeClick } from "@/hooks";
+import { useStyleStore } from "@/states";
+import { StyleAnalysisResults, TypeAnalysisResults } from "@/components";
+
+interface FileRow {
+  url?: string;
+  isValid?: boolean;
+  status?: number;
+  isXml?: boolean;
+  typeValue?: string;
+  styleContent?: string;
+  과목코드?: string;
+  학년?: string | number;
+  학기?: string | number;
+  단원순서?: string | number;
+  학년E?: string | number;
+  목차일련번호?: string | number;
+}
 
 export default function Home() {
-  const [fileData, setFileData] = useState<ExtractedRow[] | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [validOnly, setValidOnly] = useState<boolean>(false);
-  const [showValidOnly, setShowValidOnly] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
   const [serverUrl, setServerUrl] = useState<string>("http://127.0.0.1:5000/");
   const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
@@ -28,12 +43,13 @@ export default function Home() {
     string,
     number
   > | null>(null);
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string | null>(
-    null
-  );
-  const [selectedStyleFilter, setSelectedStyleFilter] = useState<string | null>(
-    null
-  );
+
+  const { fileData, setFileData } = useStyleStore();
+  const { selectedTypeFilter, setSelectedTypeFilter } = useStyleStore();
+  const { selectedStyleFilter, setSelectedStyleFilter } = useStyleStore();
+
+  const handleFileUpload = useHandleFileUpload();
+  const handleTypeClick = useHandleTypeClick();
 
   useEffect(() => {
     return () => {
@@ -43,131 +59,10 @@ export default function Home() {
     };
   }, [pollingInterval]);
 
-  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result;
-      if (!result || typeof result === "string") return;
-
-      const data = new Uint8Array(result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-
-      const originalData = XLSX.utils.sheet_to_json(sheet, {
-        header: "A",
-      }) as ExcelRow[];
-
-      const filteredOriginalData = originalData.filter((row: ExcelRow) => {
-        return row["Z"] !== "중복" && row["U"] === "Y";
-      });
-
-      const extractedData = filteredOriginalData
-        .slice(1)
-        .map((row) => {
-          const typedRow = row as Record<string, string | number>;
-          const rowEntries = Object.entries(typedRow);
-
-          if (rowEntries.length === 0) return null;
-          const grade = String(rowEntries[3]?.[1] || "");
-          const term = String(rowEntries[4]?.[1] || "");
-
-          let gradeE: string;
-          switch (grade) {
-            case "예비초":
-              gradeE = "GR10";
-              break;
-            case "1학년":
-              gradeE = "GR11";
-              break;
-            case "2학년":
-              gradeE = "GR12";
-              break;
-            case "3학년":
-              gradeE = "GR13";
-              break;
-            case "4학년":
-              gradeE = "GR14";
-              break;
-            case "5학년":
-              gradeE = "GR15";
-              break;
-            case "6학년":
-              gradeE = "GR16";
-              break;
-            default:
-              gradeE = grade;
-          }
-
-          let termE: string;
-          switch (term) {
-            case "여름방학":
-              termE = "3";
-              break;
-            case "겨울방학":
-              termE = "4";
-              break;
-            default:
-              termE = term.slice(0, 1);
-              break;
-          }
-
-          const extractedValues: ExtractedRow = {
-            과목코드: rowEntries[1]?.[1],
-            학년: grade.slice(0, 1),
-            학기: termE,
-            단원순서: rowEntries[5]?.[1],
-            목차일련번호: rowEntries[6]?.[1],
-            학년E: gradeE,
-            url: null,
-          };
-
-          const resultURL = `https://cache.wjthinkbig.com/BLLCONTENTS/ACT/${extractedValues.과목코드}/${extractedValues.학년E}/${extractedValues.학기}/${extractedValues.단원순서}/${extractedValues.학년E}_${extractedValues.학기}_1_${extractedValues.목차일련번호}_1.XML`;
-          extractedValues.url = resultURL;
-
-          return extractedValues;
-        })
-        .filter((row): row is ExtractedRow => row !== null);
-
-      console.log(extractedData);
-      setFileData(extractedData);
-      setSelectedTypeFilter(null);
-      setSelectedStyleFilter(null);
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const getFilteredData = () => {
-    if (!fileData) return [];
-
-    let filteredData = [...fileData];
-
-    if (validOnly) {
-      filteredData = filteredData.filter((row) => row.isValid);
-    }
-
-    if (selectedTypeFilter) {
-      filteredData = filteredData.filter(
-        (row) => row.typeValue === selectedTypeFilter
-      );
-    }
-
-    if (selectedStyleFilter) {
-      filteredData = filteredData.filter(
-        (row) => row.styleContent === selectedStyleFilter
-      );
-    }
-
-    return filteredData;
-  };
-
   const copyAllUrls = () => {
     if (!fileData) return;
 
-    const dataToUse = getFilteredData();
+    const dataToUse = displayData || [];
 
     const allUrls = dataToUse.map((row) => row.url).join("\n");
     navigator.clipboard
@@ -391,30 +286,12 @@ export default function Home() {
     setIsAnalyzing(false);
   };
 
-  const handleTypeClick = (typeValue: string) => {
-    if (selectedTypeFilter === typeValue) {
-      setSelectedTypeFilter(null);
-    } else {
-      setSelectedTypeFilter(typeValue);
-      setSelectedStyleFilter(null);
-    }
-  };
-
-  const handleStyleClick = (styleValue: string) => {
-    if (selectedStyleFilter === styleValue) {
-      setSelectedStyleFilter(null);
-    } else {
-      setSelectedStyleFilter(styleValue);
-      setSelectedTypeFilter(null);
-    }
-  };
-
   const displayData = React.useMemo(() => {
     if (!fileData) return null;
 
-    let filtered = [...fileData];
+    let filtered = [...fileData] as FileRow[];
 
-    if (showValidOnly) {
+    if (validOnly) {
       filtered = filtered.filter((row) => row.isValid === true);
     }
 
@@ -429,7 +306,7 @@ export default function Home() {
     }
 
     return filtered;
-  }, [fileData, showValidOnly, selectedTypeFilter, selectedStyleFilter]);
+  }, [fileData, validOnly, selectedTypeFilter, selectedStyleFilter]);
 
   const validCount =
     fileData?.filter((row) => row.isValid === true).length || 0;
@@ -448,185 +325,7 @@ export default function Home() {
         .length || 0
     : 0;
 
-  const filteredCount = getFilteredData().length;
-
-  const TypeAnalysisResults = ({
-    typeAnalysisResult,
-  }: {
-    typeAnalysisResult: Record<string, number> | null;
-  }) => {
-    if (!typeAnalysisResult) return null;
-
-    const entries = Object.entries(typeAnalysisResult);
-    if (entries.length === 0) return <p>분석 결과가 없습니다.</p>;
-
-    const total = entries.reduce((sum, [, count]) => sum + count, 0);
-
-    return (
-      <div className="mt-6 p-4 border rounded bg-gray-50">
-        <h3 className="text-lg font-bold mb-3">
-          XML &lt;TYPE&gt; 태그 분석 결과
-        </h3>
-        <p className="mb-2">총 분석된 XML 파일: {total}개</p>
-
-        {selectedTypeFilter && (
-          <div className="mb-4 p-2 bg-blue-100 rounded flex items-center justify-between">
-            <p>
-              <span className="font-bold">
-                &quot;{selectedTypeFilter}&quot;
-              </span>{" "}
-              TYPE 필터 적용 중 ({selectedTypeCount}개 URL)
-            </p>
-            <button
-              onClick={() => setSelectedTypeFilter(null)}
-              className="bg-blue-500 hover:bg-blue-700 text-white py-1 px-3 rounded text-sm"
-            >
-              필터 해제
-            </button>
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2 text-left">TYPE 값</th>
-                <th className="border p-2 text-center">갯수</th>
-                <th className="border p-2 text-center">비율</th>
-                <th className="border p-2 text-center">액션</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries
-                .sort((a, b) => b[1] - a[1])
-                .map(([typeValue, count]) => (
-                  <tr
-                    key={typeValue || "없음"}
-                    className={`hover:bg-gray-100 ${
-                      selectedTypeFilter === typeValue ? "bg-blue-50" : ""
-                    }`}
-                  >
-                    <td className="border p-2 font-medium">
-                      {typeValue || (
-                        <span className="text-gray-500 italic">없음</span>
-                      )}
-                    </td>
-                    <td className="border p-2 text-center">{count}</td>
-                    <td className="border p-2 text-center">
-                      {((count / total) * 100).toFixed(1)}%
-                    </td>
-                    <td className="border p-2 text-center">
-                      <button
-                        onClick={() => handleTypeClick(typeValue)}
-                        className={`py-1 px-3 rounded text-sm ${
-                          selectedTypeFilter === typeValue
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-200 hover:bg-gray-300"
-                        }`}
-                      >
-                        {selectedTypeFilter === typeValue
-                          ? "필터 해제"
-                          : "URL 보기"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const StyleAnalysisResults = ({
-    styleAnalysisResult,
-  }: {
-    styleAnalysisResult: Record<string, number> | null;
-  }) => {
-    if (!styleAnalysisResult) return null;
-
-    const entries = Object.entries(styleAnalysisResult);
-    if (entries.length === 0) return <p>STYLE 분석 결과가 없습니다.</p>;
-
-    const total = entries.reduce((sum, [, count]) => sum + count, 0);
-
-    return (
-      <div className="mt-6 p-4 border rounded bg-gray-50">
-        <h3 className="text-lg font-bold mb-3">
-          XML &lt;STYLE&gt; 태그 분석 결과
-        </h3>
-        <p className="mb-2">총 분석된 XML 파일: {total}개</p>
-
-        {selectedStyleFilter && (
-          <div className="mb-4 p-2 bg-purple-100 rounded flex items-center justify-between">
-            <p>
-              <span className="font-bold">
-                &quot;{selectedStyleFilter}&quot;
-              </span>{" "}
-              STYLE 필터 적용 중 ({selectedStyleCount}개 URL)
-            </p>
-            <button
-              onClick={() => setSelectedStyleFilter(null)}
-              className="bg-purple-500 hover:bg-purple-700 text-white py-1 px-3 rounded text-sm"
-            >
-              필터 해제
-            </button>
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="border p-2 text-left">STYLE 값</th>
-                <th className="border p-2 text-center">갯수</th>
-                <th className="border p-2 text-center">비율</th>
-                <th className="border p-2 text-center">액션</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries
-                .sort((a, b) => b[1] - a[1])
-                .map(([styleValue, count]) => (
-                  <tr
-                    key={styleValue || "없음"}
-                    className={`hover:bg-gray-100 ${
-                      selectedStyleFilter === styleValue ? "bg-purple-50" : ""
-                    }`}
-                  >
-                    <td className="border p-2 font-medium">
-                      {styleValue || (
-                        <span className="text-gray-500 italic">없음</span>
-                      )}
-                    </td>
-                    <td className="border p-2 text-center">{count}</td>
-                    <td className="border p-2 text-center">
-                      {((count / total) * 100).toFixed(1)}%
-                    </td>
-                    <td className="border p-2 text-center">
-                      <button
-                        onClick={() => handleStyleClick(styleValue)}
-                        className={`py-1 px-3 rounded text-sm ${
-                          selectedStyleFilter === styleValue
-                            ? "bg-purple-600 text-white"
-                            : "bg-gray-200 hover:bg-gray-300"
-                        }`}
-                      >
-                        {selectedStyleFilter === styleValue
-                          ? "필터 해제"
-                          : "URL 보기"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
-  const downloadXML = async (url: string, filename: string) => {
+  const downloadXML = async (url: string, row: FileRow) => {
     try {
       const response = await axios.get(`${serverUrl}/download-xml`, {
         params: { url },
@@ -635,9 +334,16 @@ export default function Home() {
 
       const blob = new Blob([response.data], { type: "application/xml" });
       const downloadUrl = window.URL.createObjectURL(blob);
+
+      let filename = url.split("/").pop() || "download.xml";
+
+      if (row.과목코드 && row.학년 && row.학기 && row.목차일련번호) {
+        filename = `${row.과목코드}_${row.학년}_${row.학기}_${row.목차일련번호}.xml`;
+      }
+
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.setAttribute("download", filename || "download.xml");
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -652,7 +358,7 @@ export default function Home() {
   };
 
   const downloadSelectedXMLs = async (useZip = true) => {
-    const dataToDownload = getFilteredData();
+    const dataToDownload = displayData || [];
     if (!dataToDownload.length) {
       alert("다운로드할 XML 파일이 없습니다.");
       return;
@@ -671,9 +377,27 @@ export default function Home() {
     if (useZip) {
       try {
         const urls = validFiles.map((row) => row.url as string);
+
+        const filenameMapping: Record<string, string> = {};
+        validFiles.forEach((row) => {
+          if (row.url) {
+            if (row.과목코드 && row.학년 && row.학기 && row.목차일련번호) {
+              filenameMapping[
+                row.url
+              ] = `${row.과목코드}_${row.학년}_${row.학기}_${row.목차일련번호}.xml`;
+            } else {
+              const defaultName = row.url.split("/").pop() || "file.xml";
+              filenameMapping[row.url] = defaultName;
+            }
+          }
+        });
+
         const response = await axios.post(
           `${serverUrl}/create-zip`,
-          { urls },
+          {
+            urls,
+            filenames: filenameMapping,
+          },
           { responseType: "blob" }
         );
 
@@ -710,9 +434,7 @@ export default function Home() {
         const row = validFiles[i];
         if (!row.url) continue;
 
-        const filename = row.url.split("/").pop() || `file_${i}.xml`;
-
-        const success = await downloadXML(row.url, filename);
+        const success = await downloadXML(row.url, row);
         if (success) successCount++;
 
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -815,19 +537,8 @@ export default function Home() {
                   onChange={(e) => setValidOnly(e.target.checked)}
                   className="w-4 h-4"
                 />
-                <label htmlFor="validOnly">유효한 URL만 복사</label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="showValidOnly"
-                  checked={showValidOnly}
-                  onChange={(e) => setShowValidOnly(e.target.checked)}
-                  className="w-4 h-4"
-                />
                 <label
-                  htmlFor="showValidOnly"
+                  htmlFor="validOnly"
                   className="font-medium text-green-600"
                 >
                   유효한 URL만 보기
@@ -844,7 +555,7 @@ export default function Home() {
                   <>
                     <span>
                       {validOnly || selectedTypeFilter || selectedStyleFilter
-                        ? `필터링된 URL 복사 (${filteredCount}개)`
+                        ? `필터링된 URL 복사 (${validCount}개)`
                         : `모든 URL 복사 (${fileData.length}개)`}
                     </span>
                   </>
@@ -857,7 +568,7 @@ export default function Home() {
               >
                 {isDownloading
                   ? "ZIP 다운로드 중..."
-                  : `ZIP으로 다운로드 (${filteredCount}개)`}
+                  : `ZIP으로 다운로드 (${validCount}개)`}
               </button>
             </div>
           </div>
@@ -879,7 +590,7 @@ export default function Home() {
             <p className="text-sm text-gray-600">
               총 URL 수: {fileData.length} | 유효한 URL: {validCount} | 유효하지
               않은 URL: {invalidCount} | 검사되지 않은 URL: {uncheckedCount}
-              {showValidOnly && (
+              {validOnly && (
                 <span className="ml-2 font-medium text-green-600">
                   (현재 유효한 URL {validCount}개만 표시 중)
                 </span>
@@ -904,7 +615,10 @@ export default function Home() {
           )}
 
           {styleAnalysisResult && (
-            <StyleAnalysisResults styleAnalysisResult={styleAnalysisResult} />
+            <StyleAnalysisResults
+              styleAnalysisResult={styleAnalysisResult}
+              selectedStyleCount={selectedStyleCount}
+            />
           )}
 
           <ul className="list-disc pl-5 space-y-2">
@@ -987,9 +701,7 @@ export default function Home() {
                       onClick={(e) => {
                         e.preventDefault();
                         if (row.url) {
-                          const filename =
-                            row.url.split("/").pop() || "file.xml";
-                          downloadXML(row.url, filename);
+                          downloadXML(row.url, row);
                         }
                       }}
                       disabled={
