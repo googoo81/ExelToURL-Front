@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import axios from "axios";
-import { JobStatus, FileRow } from "@/types";
+import { useState } from "react";
+import { JobStatus, FileRow, JobType } from "@/types";
 import React from "react";
-import { useHandleFileUpload, useHandleTypeClick } from "@/hooks";
+import {
+  useHandleFileUpload,
+  useHandleTypeClick,
+  useJobPolling,
+} from "@/hooks";
 import { useStyleStore } from "@/states";
 import { AnalysisResults } from "@/components";
 import {
@@ -20,12 +23,9 @@ export default function Home() {
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [validOnly, setValidOnly] = useState<boolean>(false);
-  const [validationProgress, setValidationProgress] = useState<number>(0);
   const serverUrl = "http://127.0.0.1:5000";
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
-    null
-  );
+  const [validationProgress, setValidationProgress] = useState<number>(0);
   const [typeAnalysisResult, setTypeAnalysisResult] = useState<Record<
     string,
     number
@@ -38,19 +38,19 @@ export default function Home() {
   const handleFileUpload = useHandleFileUpload();
   const handleTypeClick = useHandleTypeClick();
 
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
-    };
-  }, [pollingInterval]);
+  const {
+    progress: jobProgress,
+    pollJobStatus,
+    cancelPolling,
+  } = useJobPolling(serverUrl);
+
+  React.useEffect(() => {
+    setValidationProgress(jobProgress);
+  }, [jobProgress]);
 
   const copyAllUrls = () => {
     if (!fileData) return;
-
     const dataToUse = displayData || [];
-
     const allUrls = dataToUse.map((row) => row.url).join("\n");
     navigator.clipboard
       .writeText(allUrls)
@@ -63,92 +63,24 @@ export default function Home() {
       });
   };
 
-  const pollJobStatus = (jobId: string, jobType = "validation") => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<JobStatus>(
-          `${serverUrl}/job-status/${jobId}`
-        );
-        const jobStatus = response.data;
-
-        setValidationProgress(jobStatus.progress);
-
-        if (jobStatus.status === "completed") {
-          clearInterval(interval);
-          setPollingInterval(null);
-
-          if (jobType === "validation" || jobType === "xml_validation") {
-            setIsValidating(false);
-          } else if (jobType === "analysis") {
-            setIsAnalyzing(false);
-          }
-
-          if (jobStatus.results && fileData) {
-            const updatedData = [...fileData];
-
-            jobStatus.results.forEach((result) => {
-              const matchingRow = updatedData.find(
-                (row) => row.url === result.url
-              );
-              if (matchingRow) {
-                if (result.isValid !== undefined) {
-                  matchingRow.isValid = result.isValid;
-                }
-                if (result.statusCode !== undefined) {
-                  matchingRow.status = result.statusCode;
-                }
-                if (result.isXml !== undefined) {
-                  matchingRow.isXml = result.isXml;
-                }
-
-                if (result.type_value !== undefined) {
-                  matchingRow.typeValue = result.type_value;
-                }
-                if (result.style_content !== undefined) {
-                  matchingRow.styleContent = result.style_content;
-                }
-              }
-            });
-
-            setFileData(updatedData);
-          }
-
-          if (jobType === "analysis") {
-            if (jobStatus.type_counts) {
-              setTypeAnalysisResult(jobStatus.type_counts);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Error polling ${jobType} status:`, error);
-        clearInterval(interval);
-        setPollingInterval(null);
-
-        if (jobType === "validation" || jobType === "xml_validation") {
-          setIsValidating(false);
-        } else if (jobType === "analysis") {
-          setIsAnalyzing(false);
-        }
-      }
-    }, 1000);
-
-    setPollingInterval(interval);
-  };
-
   const handleUrlValidation = async () => {
     if (!fileData) return;
     setIsValidating(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
     setSelectedStyleFilter(null);
-
     try {
       const result = await startUrlValidation(fileData);
       if (result) {
-        pollJobStatus(result.jobId, result.type);
+        pollJobStatus(result.jobId, result.type as JobType, {
+          onComplete: (jobStatus) => {
+            setIsValidating(false);
+            updateFileDataWithResults(jobStatus);
+          },
+          onError: () => {
+            setIsValidating(false);
+          },
+        });
       } else {
         setIsValidating(false);
       }
@@ -166,9 +98,16 @@ export default function Home() {
     setSelectedStyleFilter(null);
     try {
       const result = await startXmlValidation(fileData);
-
       if (result) {
-        pollJobStatus(result.jobId, result.type);
+        pollJobStatus(result.jobId, result.type as JobType, {
+          onComplete: (jobStatus) => {
+            setIsValidating(false);
+            updateFileDataWithResults(jobStatus);
+          },
+          onError: () => {
+            setIsValidating(false);
+          },
+        });
       } else {
         setIsValidating(false);
       }
@@ -188,7 +127,18 @@ export default function Home() {
     try {
       const result = await startTypeAnalysis(fileData);
       if (result.success) {
-        pollJobStatus(result.jobId, result.type);
+        pollJobStatus(result.jobId, result.type as JobType, {
+          onComplete: (jobStatus) => {
+            setIsAnalyzing(false);
+            updateFileDataWithResults(jobStatus);
+            if (jobStatus.type_counts) {
+              setTypeAnalysisResult(jobStatus.type_counts);
+            }
+          },
+          onError: () => {
+            setIsAnalyzing(false);
+          },
+        });
       } else {
         if (result.message) {
           alert(result.message);
@@ -198,6 +148,34 @@ export default function Home() {
     } catch (error) {
       console.error("Error in analysis process:", error);
       setIsAnalyzing(false);
+    }
+  };
+
+  const updateFileDataWithResults = (jobStatus: JobStatus) => {
+    if (jobStatus.results && fileData) {
+      const updatedData = [...fileData];
+      jobStatus.results.forEach((result) => {
+        const matchingRow = updatedData.find((row) => row.url === result.url);
+        if (matchingRow) {
+          if (result.isValid !== undefined) {
+            matchingRow.isValid = result.isValid;
+          }
+          if (result.statusCode !== undefined) {
+            matchingRow.status = result.statusCode;
+          }
+          if (result.isXml !== undefined) {
+            matchingRow.isXml = result.isXml;
+          }
+          if (result.type_value !== undefined) {
+            matchingRow.typeValue = result.type_value;
+          }
+          if (result.style_content !== undefined) {
+            matchingRow.styleContent = result.style_content;
+          }
+        }
+      });
+
+      setFileData(updatedData);
     }
   };
 
@@ -220,10 +198,7 @@ export default function Home() {
   };
 
   const cancelValidation = () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      setPollingInterval(null);
-    }
+    cancelPolling();
     setIsValidating(false);
     setIsAnalyzing(false);
   };
@@ -307,7 +282,6 @@ export default function Home() {
           }
         });
         const result = await downloadMultipleXMLsAsZip(urls, filenameMapping);
-
         if (result.success) {
           alert(`${result.count}개의 XML 파일이 ZIP으로 다운로드되었습니다.`);
         } else if (result.message) {
@@ -329,7 +303,6 @@ export default function Home() {
           return;
         }
       }
-
       let successCount = 0;
       for (let i = 0; i < Math.min(validFiles.length, maxDownloads); i++) {
         const row = validFiles[i];
@@ -553,7 +526,7 @@ export default function Home() {
                     {row.styleContent && (
                       <span
                         className={`ml-2 px-2 py-1 text-xs rounded ${
-                          row.styleContent === selectedTypeFilter
+                          row.styleContent === selectedStyleFilter
                             ? "bg-purple-600 text-white font-bold"
                             : "bg-purple-500 text-white"
                         }`}
