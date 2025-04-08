@@ -7,6 +7,13 @@ import React from "react";
 import { useHandleFileUpload, useHandleTypeClick } from "@/hooks";
 import { useStyleStore } from "@/states";
 import { AnalysisResults } from "@/components";
+import {
+  downloadMultipleXMLsAsZip,
+  downloadSingleXML,
+  startTypeAnalysis,
+  startUrlValidation,
+  startXmlValidation,
+} from "@/apis";
 
 export default function Home() {
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
@@ -14,8 +21,7 @@ export default function Home() {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [validOnly, setValidOnly] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
-  const [serverUrl, setServerUrl] = useState<string>("http://127.0.0.1:5000/");
-  const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
+  const serverUrl = "http://127.0.0.1:5000";
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
@@ -132,78 +138,65 @@ export default function Home() {
     setPollingInterval(interval);
   };
 
-  const startUrlValidation = async () => {
+  const handleUrlValidation = async () => {
     if (!fileData) return;
-
     setIsValidating(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
     setSelectedStyleFilter(null);
 
     try {
-      const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
-      const response = await axios.post(`${serverUrl}/start-validation`, {
-        urls,
-      });
-      const jobId = response.data.job_id;
-      pollJobStatus(jobId, "validation");
+      const result = await startUrlValidation(fileData);
+      if (result) {
+        pollJobStatus(result.jobId, result.type);
+      } else {
+        setIsValidating(false);
+      }
     } catch (error) {
-      console.error("Error starting validation:", error);
+      console.error("Error in validation process:", error);
       setIsValidating(false);
     }
   };
 
-  const startXmlValidation = async () => {
+  const handleXmlValidation = async () => {
     if (!fileData) return;
-
     setIsValidating(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
     setSelectedStyleFilter(null);
-
     try {
-      const urls = fileData.map((row) => row.url).filter(Boolean) as string[];
-      const response = await axios.post(`${serverUrl}/start-xml-validation`, {
-        urls,
-      });
-      const jobId = response.data.job_id;
-      pollJobStatus(jobId, "xml_validation");
+      const result = await startXmlValidation(fileData);
+
+      if (result) {
+        pollJobStatus(result.jobId, result.type);
+      } else {
+        setIsValidating(false);
+      }
     } catch (error) {
-      console.error("Error starting XML validation:", error);
+      console.error("Error in XML validation process:", error);
       setIsValidating(false);
     }
   };
 
-  const startTypeAnalysis = async () => {
+  const handleTypeAnalysis = async () => {
     if (!fileData) return;
-
     setIsAnalyzing(true);
     setValidationProgress(0);
     setSelectedTypeFilter(null);
     setSelectedStyleFilter(null);
 
     try {
-      const validUrls = fileData
-        .filter((row) => row.isValid === true)
-        .map((row) => row.url)
-        .filter(Boolean) as string[];
-
-      if (validUrls.length === 0) {
-        alert(
-          "분석할 유효한 URL이 없습니다. 먼저 URL 유효성 검사를 실행해주세요."
-        );
+      const result = await startTypeAnalysis(fileData);
+      if (result.success) {
+        pollJobStatus(result.jobId, result.type);
+      } else {
+        if (result.message) {
+          alert(result.message);
+        }
         setIsAnalyzing(false);
-        return;
       }
-
-      const response = await axios.post(`${serverUrl}/analyze-xml-types`, {
-        urls: validUrls,
-      });
-
-      const jobId = response.data.job_id;
-      pollJobStatus(jobId, "analysis");
     } catch (error) {
-      console.error("Error starting XML analysis:", error);
+      console.error("Error in analysis process:", error);
       setIsAnalyzing(false);
     }
   };
@@ -231,7 +224,6 @@ export default function Home() {
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
-
     setIsValidating(false);
     setIsAnalyzing(false);
   };
@@ -276,35 +268,11 @@ export default function Home() {
     : 0;
 
   const downloadXML = async (url: string, row: FileRow) => {
-    try {
-      const response = await axios.get(`${serverUrl}/download-xml`, {
-        params: { url },
-        responseType: "blob",
-      });
-
-      const blob = new Blob([response.data], { type: "application/xml" });
-      const downloadUrl = window.URL.createObjectURL(blob);
-
-      let filename = url.split("/").pop() || "download.xml";
-
-      if (row.과목코드 && row.학년 && row.학기 && row.목차일련번호) {
-        filename = `${row.과목코드}_${row.학년}_${row.학기}_${row.목차일련번호}.xml`;
-      }
-
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.setAttribute("download", filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-
-      return true;
-    } catch (error) {
-      console.error("Error downloading XML:", error);
-      alert("XML 다운로드 중 오류가 발생했습니다.");
-      return false;
+    const result = await downloadSingleXML(url, row);
+    if (!result.success && result.message) {
+      alert(result.message);
     }
+    return result.success;
   };
 
   const downloadSelectedXMLs = async (useZip = true) => {
@@ -313,7 +281,6 @@ export default function Home() {
       alert("다운로드할 XML 파일이 없습니다.");
       return;
     }
-
     const validFiles = dataToDownload.filter(
       (row) => row.url && row.isValid !== false
     );
@@ -321,13 +288,11 @@ export default function Home() {
       alert("다운로드할 유효한 XML 파일이 없습니다.");
       return;
     }
-
     setIsDownloading(true);
 
     if (useZip) {
       try {
         const urls = validFiles.map((row) => row.url as string);
-
         const filenameMapping: Record<string, string> = {};
         validFiles.forEach((row) => {
           if (row.url) {
@@ -341,27 +306,13 @@ export default function Home() {
             }
           }
         });
+        const result = await downloadMultipleXMLsAsZip(urls, filenameMapping);
 
-        const response = await axios.post(
-          `${serverUrl}/create-zip`,
-          {
-            urls,
-            filenames: filenameMapping,
-          },
-          { responseType: "blob" }
-        );
-
-        const blob = new Blob([response.data], { type: "application/zip" });
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.setAttribute("download", "xml_files.zip");
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(downloadUrl);
-
-        alert(`${urls.length}개의 XML 파일이 ZIP으로 다운로드되었습니다.`);
+        if (result.success) {
+          alert(`${result.count}개의 XML 파일이 ZIP으로 다운로드되었습니다.`);
+        } else if (result.message) {
+          alert(result.message);
+        }
       } catch (error) {
         console.error("Error downloading ZIP:", error);
         alert("ZIP 다운로드 중 오류가 발생했습니다.");
@@ -383,47 +334,18 @@ export default function Home() {
       for (let i = 0; i < Math.min(validFiles.length, maxDownloads); i++) {
         const row = validFiles[i];
         if (!row.url) continue;
-
         const success = await downloadXML(row.url, row);
         if (success) successCount++;
-
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
-
       alert(`${successCount}개의 XML 파일 다운로드를 완료했습니다.`);
     }
-
     setIsDownloading(false);
   };
 
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">URL 추출 및 유효성 검사</h1>
-
-      <div className="mb-4">
-        <button
-          onClick={() => setShowServerConfig(!showServerConfig)}
-          className="mb-2 bg-gray-500 hover:bg-gray-700 text-white py-1 px-3 rounded text-sm"
-        >
-          {showServerConfig ? "서버 설정 닫기" : "서버 설정 보기"}
-        </button>
-
-        {showServerConfig && (
-          <div className="p-3 border rounded bg-gray-50">
-            <div className="flex gap-2 items-center">
-              <label className="font-medium">Flask 서버 URL:</label>
-              <input
-                type="text"
-                value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
-                className="border rounded p-1 flex-grow"
-                placeholder="http://127.0.0.1:5000/"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
       <input
         type="file"
         accept=".xlsx, .xls"
@@ -446,7 +368,7 @@ export default function Home() {
               ) : (
                 <>
                   <button
-                    onClick={startUrlValidation}
+                    onClick={handleUrlValidation}
                     disabled={isValidating || isAnalyzing}
                     className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
@@ -454,7 +376,7 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={startXmlValidation}
+                    onClick={handleXmlValidation}
                     disabled={isValidating || isAnalyzing}
                     className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
@@ -462,7 +384,7 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={startTypeAnalysis}
+                    onClick={handleTypeAnalysis}
                     disabled={isValidating || isAnalyzing}
                     className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
