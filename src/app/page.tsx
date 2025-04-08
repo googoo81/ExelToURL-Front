@@ -4,12 +4,18 @@ import { useState } from "react";
 import { JobStatus, FileRow, JobType } from "@/types";
 import React from "react";
 import {
+  useCopyAllUrls,
+  useDisplayData,
   useHandleFileUpload,
-  useHandleTypeClick,
   useJobPolling,
 } from "@/hooks";
 import { useStyleStore } from "@/states";
-import { AnalysisResults } from "@/components";
+import {
+  AnalysisResults,
+  ParseTotal,
+  Progress,
+  ResultTable,
+} from "@/components";
 import {
   downloadMultipleXMLsAsZip,
   downloadSingleXML,
@@ -36,7 +42,8 @@ export default function Home() {
   const { selectedStyleFilter, setSelectedStyleFilter } = useStyleStore();
 
   const handleFileUpload = useHandleFileUpload();
-  const handleTypeClick = useHandleTypeClick();
+  const displayData = useDisplayData(validOnly);
+  const copyAllUrls = useCopyAllUrls(setCopySuccess, validOnly);
 
   const {
     progress: jobProgress,
@@ -47,21 +54,6 @@ export default function Home() {
   React.useEffect(() => {
     setValidationProgress(jobProgress);
   }, [jobProgress]);
-
-  const copyAllUrls = () => {
-    if (!fileData) return;
-    const dataToUse = displayData || [];
-    const allUrls = dataToUse.map((row) => row.url).join("\n");
-    navigator.clipboard
-      .writeText(allUrls)
-      .then(() => {
-        setCopySuccess(true);
-        setTimeout(() => setCopySuccess(false), 2000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy URLs: ", err);
-      });
-  };
 
   const handleUrlValidation = async () => {
     if (!fileData) return;
@@ -202,45 +194,6 @@ export default function Home() {
     setIsValidating(false);
     setIsAnalyzing(false);
   };
-
-  const displayData = React.useMemo(() => {
-    if (!fileData) return null;
-
-    let filtered = [...fileData] as FileRow[];
-
-    if (validOnly) {
-      filtered = filtered.filter((row) => row.isValid === true);
-    }
-
-    if (selectedTypeFilter) {
-      filtered = filtered.filter((row) => row.typeValue === selectedTypeFilter);
-    }
-
-    if (selectedStyleFilter) {
-      filtered = filtered.filter(
-        (row) => row.styleContent === selectedStyleFilter
-      );
-    }
-
-    return filtered;
-  }, [fileData, validOnly, selectedTypeFilter, selectedStyleFilter]);
-
-  const validCount =
-    fileData?.filter((row) => row.isValid === true).length || 0;
-  const invalidCount =
-    fileData?.filter((row) => row.isValid === false).length || 0;
-  const uncheckedCount =
-    fileData?.filter((row) => row.isValid === undefined).length || 0;
-
-  const selectedTypeCount = selectedTypeFilter
-    ? fileData?.filter((row) => row.typeValue === selectedTypeFilter).length ||
-      0
-    : 0;
-
-  const selectedStyleCount = selectedStyleFilter
-    ? fileData?.filter((row) => row.styleContent === selectedStyleFilter)
-        .length || 0
-    : 0;
 
   const downloadXML = async (url: string, row: FileRow) => {
     const result = await downloadSingleXML(url, row);
@@ -422,157 +375,17 @@ export default function Home() {
           </div>
 
           {(isValidating || isAnalyzing) && (
-            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-              <div
-                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                style={{ width: `${validationProgress}%` }}
-              ></div>
-              <p className="text-center text-sm mt-1">
-                진행률: {validationProgress}%{" "}
-                {isAnalyzing && "(태그 분석 중...)"}
-              </p>
-            </div>
+            <Progress
+              isAnalyzing={isAnalyzing}
+              validationProgress={validationProgress}
+            />
           )}
 
-          <div className="mb-4">
-            <p className="text-sm text-gray-600">
-              총 URL 수: {fileData.length} | 유효한 URL: {validCount} | 유효하지
-              않은 URL: {invalidCount} | 검사되지 않은 URL: {uncheckedCount}
-              {validOnly && (
-                <span className="ml-2 font-medium text-green-600">
-                  (현재 유효한 URL {validCount}개만 표시 중)
-                </span>
-              )}
-              {selectedTypeFilter && (
-                <span className="ml-2 font-medium text-blue-600">
-                  | TYPE: &quot;{selectedTypeFilter}&quot; 필터 적용 중 (
-                  {selectedTypeCount}개)
-                </span>
-              )}
-              {selectedStyleFilter && (
-                <span className="ml-2 font-medium text-purple-600">
-                  | STYLE: &quot;{selectedStyleFilter}&quot; 필터 적용 중 (
-                  {selectedStyleCount}개)
-                </span>
-              )}
-            </p>
-          </div>
+          <ParseTotal validOnly={validOnly} />
 
           {typeAnalysisResult && <AnalysisResults />}
 
-          <ul className="list-disc pl-5 space-y-2">
-            <li className="border-b pb-2">
-              https://cache.wjthinkbig.com/BLLCONTENTS/ACT/과목코드/학년/학기/단원순서/학년_학기_1_목차일련번호_1.XML
-              <br />
-              https://cache.wjthinkbig.com/BLLCONTENTS/ACT/SCNE/GR14/4/1/GR14_4_1_129787_1.XML
-            </li>
-
-            {displayData && displayData.length > 0 ? (
-              displayData.map((row, index) => (
-                <li
-                  key={index}
-                  className={`border-b pb-2 ${
-                    row.isValid === false
-                      ? "bg-red-100"
-                      : row.isValid === true
-                      ? "bg-green-100"
-                      : ""
-                  } ${
-                    row.typeValue === selectedTypeFilter
-                      ? "ring-2 ring-blue-400"
-                      : ""
-                  } ${
-                    row.styleContent === selectedStyleFilter
-                      ? "ring-2 ring-purple-400"
-                      : ""
-                  }`}
-                >
-                  <div className="mb-1">
-                    <span className="font-medium">과목코드:</span>{" "}
-                    {row.과목코드}, <span className="font-medium">학년:</span>{" "}
-                    {row.학년}, <span className="font-medium">학기:</span>{" "}
-                    {row.학기}, <span className="font-medium">단원순서:</span>{" "}
-                    {row.단원순서}, <span className="font-medium">학년E:</span>{" "}
-                    {row.학년E},{" "}
-                    <span className="font-medium">목차일련번호:</span>{" "}
-                    {row.목차일련번호}
-                    {row.isValid !== undefined && (
-                      <span
-                        className={`ml-2 px-2 py-1 text-xs rounded ${
-                          row.isValid
-                            ? "bg-green-500 text-white"
-                            : "bg-red-500 text-white"
-                        }`}
-                      >
-                        {row.isValid ? "유효함" : "접근 불가"}
-                        {row.status && `(${row.status})`}
-                        {row.isXml && " XML확인"}
-                      </span>
-                    )}
-                    {row.typeValue && (
-                      <span
-                        className={`ml-2 px-2 py-1 text-xs rounded ${
-                          row.typeValue === selectedTypeFilter
-                            ? "bg-blue-600 text-white font-bold"
-                            : "bg-blue-500 text-white"
-                        }`}
-                        onClick={() => handleTypeClick(row.typeValue as string)}
-                        style={{ cursor: "pointer" }}
-                        title="클릭하여 이 TYPE으로 필터링"
-                      >
-                        TYPE: {row.typeValue}
-                      </span>
-                    )}
-                    {row.styleContent && (
-                      <span
-                        className={`ml-2 px-2 py-1 text-xs rounded ${
-                          row.styleContent === selectedStyleFilter
-                            ? "bg-purple-600 text-white font-bold"
-                            : "bg-purple-500 text-white"
-                        }`}
-                        style={{ cursor: "pointer" }}
-                        title="클릭하여 이 STYLE으로 필터링"
-                      >
-                        STYLE: {row.styleContent}
-                      </span>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (row.url) {
-                          downloadXML(row.url, row);
-                        }
-                      }}
-                      disabled={
-                        !row.url || row.isValid === false || isDownloading
-                      }
-                      className="ml-2 px-2 py-1 text-xs rounded bg-teal-500 hover:bg-teal-700 text-white disabled:bg-gray-400"
-                    >
-                      다운로드
-                    </button>
-                  </div>
-                  <a
-                    href={row.url || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`hover:underline break-all ${
-                      row.isValid === false
-                        ? "text-red-600 line-through"
-                        : "text-blue-600"
-                    }`}
-                  >
-                    {row.url}
-                  </a>
-                </li>
-              ))
-            ) : (
-              <li className="py-4 text-center text-gray-500">
-                {selectedTypeFilter
-                  ? `선택한 TYPE "${selectedTypeFilter}"에 해당하는 URL이 없습니다.`
-                  : "표시할 URL이 없습니다."}
-              </li>
-            )}
-          </ul>
+          <ResultTable validOnly={validOnly} />
         </div>
       )}
     </div>
