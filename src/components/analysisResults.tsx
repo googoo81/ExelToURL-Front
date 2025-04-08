@@ -1,24 +1,30 @@
+import React from "react";
 import { JobStatus } from "@/types";
+import ExcelJS from "exceljs";
 
 export default function AnalysisResults({
   XMLTagResult,
 }: {
   XMLTagResult: JobStatus | null;
 }) {
-  const getCellStyle = (value?: string) => {
-    if (value === "undefined") {
+  const getCellStyle = (value?: string | number | null) => {
+    const stringValue = String(value);
+    if (stringValue === "undefined" || value === undefined) {
       return "border p-2 text-center bg-red-100 text-red-700";
-    } else if (value === "null") {
+    } else if (stringValue === "null" || value === null) {
       return "border p-2 text-center bg-yellow-100 text-yellow-700";
     }
     return "border p-2 text-center";
   };
 
-  const downloadAsExcel = () => {
+  const downloadAsExcel = async () => {
     if (!XMLTagResult?.results || XMLTagResult.results.length === 0) {
       alert("다운로드할 데이터가 없습니다.");
       return;
     }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("AnalysisResults");
 
     const headers = [
       "COURSE_CODE",
@@ -33,34 +39,82 @@ export default function AnalysisResults({
       "XML_URL",
     ];
 
-    const csvData = [
-      headers.join(","),
-      ...XMLTagResult.results.map((row) =>
-        [
-          row.course_code || "",
-          row.grade || "",
-          row.session || "",
-          row.unit || "",
-          row.period || "",
-          row.order || "",
-          row.study || "",
-          row.type_value || "",
-          row.style_content || "",
-          row.url || "",
-        ].join(",")
-      ),
-    ].join("\n");
+    worksheet.addRow(headers);
 
-    const BOM = "\uFEFF";
-    const blob = new Blob([BOM + csvData], { type: "text/csv;charset=utf-8;" });
+    XMLTagResult.results.forEach((row) => {
+      worksheet.addRow([
+        row.course_code ?? "",
+        row.grade ?? "",
+        row.session ?? "",
+        row.unit ?? "",
+        row.period ?? "",
+        row.order ?? "",
+        row.study ?? "",
+        row.type_value ?? "",
+        row.style_content ?? "",
+        row.url ?? "",
+      ]);
+    });
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4F81BD" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4F81BD" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    worksheet.autoFilter = {
+      from: "A1",
+      to: "I1",
+    };
+
+    worksheet.columns.forEach((column) => {
+      let maxLength = 10;
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const length = cell.value?.toString().length ?? 10;
+        if (length > maxLength) {
+          maxLength = length;
+        }
+      });
+      column.width = maxLength + 2;
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "xml_analysis_results.csv");
-    document.body.appendChild(link);
+    link.href = url;
+    link.download = "xml_analysis_results.xlsx";
     link.click();
-    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -111,28 +165,45 @@ export default function AnalysisResults({
             {XMLTagResult?.results?.map((row, index) => (
               <tr key={index}>
                 <td className={getCellStyle(row.course_code)}>
-                  {row.course_code}
+                  {String(row.course_code ?? "")}
                 </td>
-                <td className={getCellStyle(row.grade)}>{row.grade}</td>
-                <td className={getCellStyle(row.session)}>{row.session}</td>
-                <td className={getCellStyle(row.unit)}>{row.unit}</td>
-                <td className={getCellStyle(row.period)}>{row.period}</td>
-                <td className={getCellStyle(row.order)}>{row.order}</td>
-                <td className={getCellStyle(row.study)}>{row.study}</td>
+                <td className={getCellStyle(row.grade)}>
+                  {String(row.grade ?? "")}
+                </td>
+                <td className={getCellStyle(row.session)}>
+                  {String(row.session ?? "")}
+                </td>
+                <td className={getCellStyle(row.unit)}>
+                  {String(row.unit ?? "")}
+                </td>
+                <td className={getCellStyle(row.period)}>
+                  {String(row.period ?? "")}
+                </td>
+                <td className={getCellStyle(row.order)}>
+                  {String(row.order ?? "")}
+                </td>
+                <td className={getCellStyle(row.study)}>
+                  {String(row.study ?? "")}
+                </td>
                 <td className={getCellStyle(row.type_value)}>
-                  {row.type_value}
+                  {String(row.type_value ?? "")}
                 </td>
                 <td className={getCellStyle(row.style_content)}>
-                  {row.style_content}
+                  {String(row.style_content ?? "")}
                 </td>
                 <td className="border p-2 text-center">
-                  <a
-                    href={row.url}
-                    target="_blank"
-                    className="text-blue-600 hover:underline"
-                  >
-                    {row.url}
-                  </a>
+                  {row.url ? (
+                    <a
+                      href={row.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline break-all"
+                    >
+                      {row.url}
+                    </a>
+                  ) : (
+                    ""
+                  )}
                 </td>
               </tr>
             ))}
