@@ -11,4 +11,11 @@ export interface ExtractedRow {
   isXml?: boolean;
   typeValue?: string;
   styleContent?: string;
+  course_code?: string;
+  grade?: string;
+  session?: string;
+  unit?: string;
+  period?: string;
+  order?: string;
+  study?: string;
 }

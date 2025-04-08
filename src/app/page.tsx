@@ -19,7 +19,7 @@ import {
 import {
   downloadMultipleXMLsAsZip,
   downloadSingleXML,
-  startTypeAnalysis,
+  startXMLAnalysis,
   startUrlValidation,
   startXmlValidation,
 } from "@/apis";
@@ -32,6 +32,7 @@ export default function Home() {
   const serverUrl = "http://127.0.0.1:5000";
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
+  const [XMLTagResult, setXMLTagResult] = useState<JobStatus | null>(null);
   const [typeAnalysisResult, setTypeAnalysisResult] = useState<Record<
     string,
     number
@@ -117,12 +118,13 @@ export default function Home() {
     setSelectedStyleFilter(null);
 
     try {
-      const result = await startTypeAnalysis(fileData);
+      const result = await startXMLAnalysis(fileData);
       if (result.success) {
         pollJobStatus(result.jobId, result.type as JobType, {
           onComplete: (jobStatus) => {
             setIsAnalyzing(false);
             updateFileDataWithResults(jobStatus);
+            setXMLTagResult(jobStatus);
             if (jobStatus.type_counts) {
               setTypeAnalysisResult(jobStatus.type_counts);
             }
@@ -164,9 +166,29 @@ export default function Home() {
           if (result.style_content !== undefined) {
             matchingRow.styleContent = result.style_content;
           }
+          if (result.course_code !== undefined) {
+            matchingRow.course_code = result.course_code;
+          }
+          if (result.grade !== undefined) {
+            matchingRow.grade = result.grade;
+          }
+          if (result.session !== undefined) {
+            matchingRow.session = result.session;
+          }
+          if (result.unit !== undefined) {
+            matchingRow.unit = result.unit;
+          }
+          if (result.period !== undefined) {
+            matchingRow.period = result.period;
+          }
+          if (result.order !== undefined) {
+            matchingRow.order = result.order;
+          }
+          if (result.study !== undefined) {
+            matchingRow.study = result.study;
+          }
         }
       });
-
       setFileData(updatedData);
     }
   };
@@ -383,7 +405,9 @@ export default function Home() {
 
           <ParseTotal validOnly={validOnly} />
 
-          {typeAnalysisResult && <AnalysisResults />}
+          {typeAnalysisResult && (
+            <AnalysisResults XMLTagResult={XMLTagResult} />
+          )}
 
           <ResultTable validOnly={validOnly} />
         </div>

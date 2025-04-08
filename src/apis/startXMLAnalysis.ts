@@ -1,7 +1,7 @@
 import { axiosInstance } from "@/libs";
 import { ExtractedRow } from "@/types";
 
-export default async function startTypeAnalysis(fileData: ExtractedRow[]) {
+export default async function startXMLAnalysis(fileData: ExtractedRow[]) {
   try {
     const validUrls = fileData
       .filter((row) => row.isValid === true)
