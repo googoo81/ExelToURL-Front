@@ -40,22 +40,6 @@ export default function AnalysisResults({
     ];
 
     worksheet.addRow(headers);
-
-    XMLTagResult.results.forEach((row) => {
-      worksheet.addRow([
-        row.course_code ?? "",
-        row.grade ?? "",
-        row.session ?? "",
-        row.unit ?? "",
-        row.period ?? "",
-        row.order ?? "",
-        row.study ?? "",
-        row.type_value ?? "",
-        row.style_content ?? "",
-        row.url ?? "",
-      ]);
-    });
-
     worksheet.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = {
@@ -72,9 +56,38 @@ export default function AnalysisResults({
       };
     });
 
+    XMLTagResult.results.forEach((row, rowIndex) => {
+      const rowNumber = rowIndex + 2;
+      worksheet.addRow([
+        row.course_code ?? "",
+        row.grade ?? "",
+        row.session ?? "",
+        row.unit ?? "",
+        row.period ?? "",
+        row.order ?? "",
+        row.study ?? "",
+        row.type_value ?? "",
+        row.style_content ?? "",
+        row.url ?? "",
+      ]);
+
+      if (row.url) {
+        const cell = worksheet.getCell(`J${rowNumber}`);
+        cell.value = {
+          text: row.url,
+          hyperlink: row.url,
+          tooltip: row.url,
+        };
+        cell.font = {
+          color: { argb: "FF0000FF" },
+          underline: true,
+        };
+      }
+    });
+
     worksheet.autoFilter = {
       from: "A1",
-      to: "K1",
+      to: "J1",
     };
 
     worksheet.columns.forEach((column) => {
@@ -87,6 +100,8 @@ export default function AnalysisResults({
       });
       column.width = maxLength + 2;
     });
+
+    worksheet.getColumn("J").width = 100;
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -124,6 +139,24 @@ export default function AnalysisResults({
     ];
 
     worksheet.addRow(headers);
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4F81BD" },
+      };
+
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
 
     const grouped = XMLTagResult.results.reduce((acc, row) => {
       const key = row.type_value ?? "undefined";
@@ -159,6 +192,20 @@ export default function AnalysisResults({
           item.study,
           item.url,
         ]);
+
+        if (item.url) {
+          const cell = worksheet.getCell(`J${currentRow}`);
+          cell.value = {
+            text: item.url,
+            hyperlink: item.url,
+            tooltip: item.url,
+          };
+          cell.font = {
+            color: { argb: "FF0000FF" },
+            underline: true,
+          };
+        }
+
         currentRow++;
       });
       if (items.length > 1) {
