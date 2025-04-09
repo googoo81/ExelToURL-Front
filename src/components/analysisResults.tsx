@@ -37,6 +37,8 @@ export default function AnalysisResults({
       "TYPE",
       "STYLE",
       "XML_URL",
+      "STEP",
+      "DAY",
     ];
 
     worksheet.addRow(headers);
@@ -69,6 +71,8 @@ export default function AnalysisResults({
         row.type_value ?? "",
         row.style_content ?? "",
         row.url ?? "",
+        row.step ?? "",
+        row.day ?? "",
       ]);
 
       if (row.url) {
@@ -136,6 +140,8 @@ export default function AnalysisResults({
       "ORDER",
       "STUDY",
       "XML_URL",
+      "STEP",
+      "DAY",
     ];
 
     worksheet.addRow(headers);
@@ -171,6 +177,8 @@ export default function AnalysisResults({
         order: row.order ?? "",
         study: row.study ?? "",
         url: row.url ?? "",
+        step: row.step ?? "",
+        day: row.day ?? "",
       });
       return acc;
     }, {} as Record<string, XMLTagResultRow[]>);
@@ -191,6 +199,8 @@ export default function AnalysisResults({
           item.order,
           item.study,
           item.url,
+          item.step,
+          item.day,
         ]);
 
         if (item.url) {
@@ -228,6 +238,8 @@ export default function AnalysisResults({
       { key: "period", width: 15 },
       { key: "order", width: 15 },
       { key: "study", width: 15 },
+      { key: "step", width: 15 },
+      { key: "day", width: 15 },
       { key: "url", width: 100 },
     ];
 
@@ -283,6 +295,8 @@ export default function AnalysisResults({
               <th className="border p-2 text-center">STUDY</th>
               <th className="border p-2 text-center">TYPE</th>
               <th className="border p-2 text-center">STYLE</th>
+              <th className="border p-2 text-center">STEP</th>
+              <th className="border p-2 text-center">DAY</th>
               <th className="border p-2 text-center">XML_URL</th>
             </tr>
           </thead>
@@ -315,6 +329,12 @@ export default function AnalysisResults({
                 </td>
                 <td className={getCellStyle(row.style_content)}>
                   {String(row.style_content ?? "")}
+                </td>
+                <td className={getCellStyle(row.step)}>
+                  {String(row.step ?? "")}
+                </td>
+                <td className={getCellStyle(row.day)}>
+                  {String(row.day ?? "")}
                 </td>
                 <td className="border p-2 text-center">
                   {row.url ? (

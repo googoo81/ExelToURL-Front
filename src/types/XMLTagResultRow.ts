@@ -9,4 +9,6 @@ export interface XMLTagResultRow {
   type_value?: string | null;
   style?: string | null;
   url?: string | null;
+  step?: string | null;
+  day?: string | null;
 }

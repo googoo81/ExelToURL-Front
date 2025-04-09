@@ -15,6 +15,8 @@ export interface JobStatus {
     period?: string;
     order?: string;
     study?: string;
+    day?: string;
+    step?: string;
     error?: string;
   }>;
   type_counts?: Record<string, number>;
@@ -26,5 +28,7 @@ export interface JobStatus {
   period?: Record<string, number>;
   order?: Record<string, number>;
   study?: Record<string, number>;
+  day?: Record<string, number>;
+  step?: Record<string, number>;
   tag_counts?: Record<string, Record<string, number>> | null;
 }

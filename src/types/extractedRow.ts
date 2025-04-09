@@ -18,4 +18,6 @@ export interface ExtractedRow {
   period?: string;
   order?: string;
   study?: string;
+  step?: string;
+  day?: string;
 }

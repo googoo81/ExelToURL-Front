@@ -33,7 +33,7 @@ export default function Home() {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
   const [XMLTagResult, setXMLTagResult] = useState<JobStatus | null>(null);
-  const [typeAnalysisResult, setTypeAnalysisResult] = useState<Record<
+  const [tagAnalysisResult, setTagAnalysisResult] = useState<Record<
     string,
     number
   > | null>(null);
@@ -110,7 +110,7 @@ export default function Home() {
     }
   };
 
-  const handleTypeAnalysis = async () => {
+  const handleTagAnalysis = async () => {
     if (!fileData) return;
     setIsAnalyzing(true);
     setValidationProgress(0);
@@ -126,7 +126,8 @@ export default function Home() {
             updateFileDataWithResults(jobStatus);
             setXMLTagResult(jobStatus);
             if (jobStatus.type_counts) {
-              setTypeAnalysisResult(jobStatus.type_counts);
+              setTagAnalysisResult(jobStatus.type_counts);
+              console.log(jobStatus);
             }
           },
           onError: () => {
@@ -185,6 +186,12 @@ export default function Home() {
             matchingRow.order = result.order;
           }
           if (result.study !== undefined) {
+            matchingRow.study = result.study;
+          }
+          if (result.step !== undefined) {
+            matchingRow.study = result.study;
+          }
+          if (result.day !== undefined) {
             matchingRow.study = result.study;
           }
         }
@@ -332,7 +339,7 @@ export default function Home() {
                   </button>
 
                   <button
-                    onClick={handleTypeAnalysis}
+                    onClick={handleTagAnalysis}
                     disabled={isValidating || isAnalyzing}
                     className="bg-green-600 hover:bg-green-800 text-white font-bold py-2 px-4 rounded cursor-pointer disabled:bg-gray-400"
                   >
@@ -405,9 +412,7 @@ export default function Home() {
 
           <ParseTotal validOnly={validOnly} />
 
-          {typeAnalysisResult && (
-            <AnalysisResults XMLTagResult={XMLTagResult} />
-          )}
+          {tagAnalysisResult && <AnalysisResults XMLTagResult={XMLTagResult} />}
 
           <ResultTable validOnly={validOnly} />
         </div>
