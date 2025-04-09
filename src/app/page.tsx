@@ -29,7 +29,6 @@ export default function Home() {
   const [isValidating, setIsValidating] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [validOnly, setValidOnly] = useState<boolean>(false);
-  const serverUrl = "http://127.0.0.1:5000";
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [validationProgress, setValidationProgress] = useState<number>(0);
   const [XMLTagResult, setXMLTagResult] = useState<JobStatus | null>(null);
@@ -50,7 +49,7 @@ export default function Home() {
     progress: jobProgress,
     pollJobStatus,
     cancelPolling,
-  } = useJobPolling(serverUrl);
+  } = useJobPolling();
 
   React.useEffect(() => {
     setValidationProgress(jobProgress);

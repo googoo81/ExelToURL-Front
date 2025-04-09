@@ -94,7 +94,6 @@ export default function AnalysisResults({
       to: "K1",
     };
 
-    // 교집합 다운로드와 동일하게 열 너비 설정 변경
     worksheet.columns = [
       { key: "course_code", width: 15 },
       { key: "grade", width: 15 },

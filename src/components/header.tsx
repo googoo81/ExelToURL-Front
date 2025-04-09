@@ -20,6 +20,12 @@ export default function Header() {
         >
           오리진
         </span>
+        <span
+          onClick={() => push("/url")}
+          className="cursor-pointer hover:text-gray-300 transition"
+        >
+          링크만
+        </span>
       </div>
     </header>
   );
