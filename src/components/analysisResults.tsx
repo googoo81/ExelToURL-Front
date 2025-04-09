@@ -36,9 +36,9 @@ export default function AnalysisResults({
       "STUDY",
       "TYPE",
       "STYLE",
-      "XML_URL",
       "STEP",
       "DAY",
+      "XML_URL",
     ];
 
     worksheet.addRow(headers);
@@ -70,13 +70,13 @@ export default function AnalysisResults({
         row.study ?? "",
         row.type_value ?? "",
         row.style_content ?? "",
-        row.url ?? "",
         row.step ?? "",
         row.day ?? "",
+        row.url ?? "",
       ]);
 
       if (row.url) {
-        const cell = worksheet.getCell(`J${rowNumber}`);
+        const cell = worksheet.getCell(`L${rowNumber}`);
         cell.value = {
           text: row.url,
           hyperlink: row.url,
@@ -91,21 +91,24 @@ export default function AnalysisResults({
 
     worksheet.autoFilter = {
       from: "A1",
-      to: "J1",
+      to: "K1",
     };
 
-    worksheet.columns.forEach((column) => {
-      let maxLength = 10;
-      column.eachCell?.({ includeEmpty: true }, (cell) => {
-        const length = cell.value?.toString().length ?? 10;
-        if (length > maxLength) {
-          maxLength = length;
-        }
-      });
-      column.width = maxLength + 2;
-    });
-
-    worksheet.getColumn("J").width = 100;
+    // 교집합 다운로드와 동일하게 열 너비 설정 변경
+    worksheet.columns = [
+      { key: "course_code", width: 15 },
+      { key: "grade", width: 15 },
+      { key: "session", width: 15 },
+      { key: "unit", width: 15 },
+      { key: "period", width: 15 },
+      { key: "order", width: 15 },
+      { key: "study", width: 15 },
+      { key: "type", width: 15 },
+      { key: "style", width: 15 },
+      { key: "step", width: 15 },
+      { key: "day", width: 15 },
+      { key: "url", width: 100 },
+    ];
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -139,9 +142,9 @@ export default function AnalysisResults({
       "PERIOD",
       "ORDER",
       "STUDY",
-      "XML_URL",
       "STEP",
       "DAY",
+      "XML_URL",
     ];
 
     worksheet.addRow(headers);
@@ -176,9 +179,9 @@ export default function AnalysisResults({
         period: row.period ?? "",
         order: row.order ?? "",
         study: row.study ?? "",
-        url: row.url ?? "",
         step: row.step ?? "",
         day: row.day ?? "",
+        url: row.url ?? "",
       });
       return acc;
     }, {} as Record<string, XMLTagResultRow[]>);
@@ -198,13 +201,13 @@ export default function AnalysisResults({
           item.period,
           item.order,
           item.study,
-          item.url,
           item.step,
           item.day,
+          item.url,
         ]);
 
         if (item.url) {
-          const cell = worksheet.getCell(`J${currentRow}`);
+          const cell = worksheet.getCell(`L${currentRow}`);
           cell.value = {
             text: item.url,
             hyperlink: item.url,
@@ -225,7 +228,7 @@ export default function AnalysisResults({
 
     worksheet.autoFilter = {
       from: "A1",
-      to: "I1",
+      to: "K1",
     };
 
     worksheet.columns = [
@@ -279,6 +282,17 @@ export default function AnalysisResults({
           >
             교집합 다운로드
           </button>
+        </div>
+      </div>
+
+      <div className="mb-2 flex gap-4">
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-red-100 border border-red-700 mr-2"></div>
+          <span className="text-sm">undefined: 해당 태그 없음</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-yellow-100 border border-yellow-700 mr-2"></div>
+          <span className="text-sm">null: 태그는 있으나 값이 없음</span>
         </div>
       </div>
 
@@ -354,17 +368,6 @@ export default function AnalysisResults({
             ))}
           </tbody>
         </table>
-      </div>
-
-      <div className="mt-4 flex gap-4">
-        <div className="flex items-center">
-          <div className="w-4 h-4 bg-red-100 border border-red-700 mr-2"></div>
-          <span className="text-sm">undefined: 해당 태그 없음</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-4 h-4 bg-yellow-100 border border-yellow-700 mr-2"></div>
-          <span className="text-sm">null: 태그는 있으나 값이 없음</span>
-        </div>
       </div>
     </div>
   );
