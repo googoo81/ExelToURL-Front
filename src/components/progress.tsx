@@ -14,7 +14,7 @@ export default function Progress({
         style={{ width: `${validationProgress}%` }}
       ></div>
       <p className="text-center text-sm mt-1">
-        진행률: {validationProgress}% {isAnalyzing && "(태그 분석 중...)"}
+        진행률: {validationProgress}% {isAnalyzing && "(폴링 진행 중...)"}
       </p>
     </div>
   );
