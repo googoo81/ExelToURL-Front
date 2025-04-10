@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { JobStatus, JobType } from "@/types";
+import { axiosInstance } from "@/libs";
 
 export default function useJobPolling() {
   const [progress, setProgress] = useState<number>(0);
@@ -31,8 +31,8 @@ export default function useJobPolling() {
 
     const interval = setInterval(async () => {
       try {
-        const response = await axios.get<JobStatus>(
-          `http://127.0.0.1:5000/job-status/${jobId}`
+        const response = await axiosInstance.get<JobStatus>(
+          `/job-status/${jobId}`
         );
         const jobStatus = response.data;
 
